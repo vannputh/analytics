@@ -571,9 +571,11 @@ export default function EntriesPage() {
               onSelectModeChange={setShowSelectMode}
               onEntryUpdate={(updatedEntry) => {
                 // Update the entry in the allEntries array without full reload
+                // This preserves all table state (sort, filters, pagination, scroll position)
                 setAllEntries(prev => 
                   prev.map(entry => entry.id === updatedEntry.id ? updatedEntry : entry)
                 )
+                // Note: No refresh is triggered, so filters, sort, and pagination state are preserved
               }}
               onRefresh={async () => {
                 setLoading(true)

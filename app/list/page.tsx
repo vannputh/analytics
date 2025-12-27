@@ -301,6 +301,14 @@ export default function ListPage() {
             onRefresh={fetchEntries}
             showSelectMode={showSelectMode}
             onSelectModeChange={setShowSelectMode}
+            onEntryUpdate={(updatedEntry) => {
+              // Update the entry in the entries array without full reload
+              // This preserves all table state (sort, filters, pagination, scroll position)
+              setEntries(prev => 
+                prev.map(entry => entry.id === updatedEntry.id ? updatedEntry : entry)
+              )
+              // Note: No refresh is triggered, so filters, sort, and pagination state are preserved
+            }}
           />
         ) : (
           <MediaCardGrid

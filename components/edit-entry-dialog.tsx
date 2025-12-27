@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Upload } from "lucide-react"
+import { Loader2, Upload, Download } from "lucide-react"
 import { toast } from "sonner"
 import { SafeImage } from "@/components/ui/safe-image"
 import { differenceInDays, parseISO, isValid } from "date-fns"
@@ -35,6 +35,20 @@ interface EditEntryDialogProps {
 
 export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEntryDialogProps) {
   const [loading, setLoading] = useState(false)
+  const [fetchingMetadata, setFetchingMetadata] = useState(false)
+  const [fetchingSource, setFetchingSource] = useState<"omdb" | "tmdb" | null>(null)
+  const [showOverrideDialog, setShowOverrideDialog] = useState(false)
+  const [pendingMetadata, setPendingMetadata] = useState<any>(null)
+  const [overrideFields, setOverrideFields] = useState<Record<string, boolean>>({
+    title: true,
+    poster_url: true,
+    genre: true,
+    language: true,
+    average_rating: true,
+    length: true,
+    episodes: true,
+    imdb_id: true,
+  })
   const [uploadingImage, setUploadingImage] = useState(false)
   const [dropdownOptions, setDropdownOptions] = useState<{
     types: string[]
@@ -212,8 +226,9 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
       const result = await updateEntry(entry.id, entryData)
       if (result.success && result.data) {
         toast.success("Entry updated successfully")
-        onOpenChange(false)
+        // Call onSuccess before closing to ensure state is updated
         onSuccess?.(result.data)
+        onOpenChange(false)
       } else {
         toast.error(result.error || "Failed to update entry")
       }
@@ -296,6 +311,213 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
     }
   }
 
+  // Helper functions for detecting ISBN and IMDb ID
+  const detectISBN = (input: string | null | undefined): string | null => {
+    if (!input) return null
+    const cleaned = input.replace(/[^0-9X]/g, '')
+    if (/^(978|979)\d{10}$/.test(cleaned)) {
+      return cleaned
+    }
+    if (/^\d{9}[\dX]$/.test(cleaned)) {
+      return cleaned
+    }
+    return null
+  }
+
+  const detectIMDbID = (input: string | null | undefined): boolean => {
+    if (!input) return false
+    const trimmed = input.trim()
+    return /^tt\d{7,8}$/i.test(trimmed)
+  }
+
+  const handleFetchMetadata = async (source: "omdb" | "tmdb") => {
+    const isbn = detectISBN(formData.imdb_id)
+    const isImdbId = detectIMDbID(formData.imdb_id)
+    const hasTitle = formData.title?.trim()
+    
+    if (!hasTitle && !isbn && !isImdbId) {
+      toast.error("Please enter a title, ISBN, or IMDb ID first")
+      return
+    }
+
+    setFetchingMetadata(true)
+    setFetchingSource(source)
+    try {
+      let url = ""
+      
+      if (isbn || isImdbId) {
+        url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`
+        if (hasTitle && formData.title) {
+          url += `&title=${encodeURIComponent(formData.title.trim())}`
+        }
+      } else {
+        url = `/api/metadata?title=${encodeURIComponent((formData.title || "").trim())}&source=${source}`
+      }
+      
+      if (formData.medium) {
+        if (formData.medium === "Book") {
+          url += `&medium=${encodeURIComponent(formData.medium)}`
+        } else {
+          const typeMap: Record<string, string> = {
+            "Movie": "movie",
+            "TV Show": "series",
+          }
+          const omdbType = typeMap[formData.medium]
+          if (omdbType) {
+            url += `&type=${omdbType}`
+          }
+        }
+      } else if (isbn) {
+        url += `&medium=Book`
+      }
+      
+      if (formData.season) {
+        url += `&season=${encodeURIComponent(formData.season)}`
+      }
+
+      const response = await fetch(url)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to fetch metadata")
+      }
+
+      const metadata = await response.json()
+
+      // Check if there's existing data that would be overwritten
+      const hasExistingData = 
+        formData.title ||
+        formData.poster_url ||
+        formData.genre ||
+        formData.language ||
+        formData.average_rating !== null ||
+        formData.length ||
+        formData.episodes !== null ||
+        formData.imdb_id
+
+      if (hasExistingData) {
+        // Show confirmation dialog with field selection
+        setPendingMetadata(metadata)
+        // Initialize override fields based on what data exists and what's available in metadata
+        // Show field if metadata has it AND (form has it OR we want to allow adding new data)
+        const hasGenre = formData.genre && (Array.isArray(formData.genre) ? formData.genre.length > 0 : true)
+        const hasLanguage = formData.language && (Array.isArray(formData.language) ? formData.language.length > 0 : true)
+        setOverrideFields({
+          title: !!metadata.title && !!formData.title,
+          poster_url: !!metadata.poster_url && !!formData.poster_url,
+          genre: !!metadata.genre && !!hasGenre,
+          language: !!metadata.language && !!hasLanguage,
+          average_rating: metadata.average_rating !== null && formData.average_rating !== null,
+          length: !!metadata.length,
+          episodes: metadata.episodes !== null && formData.episodes !== null,
+          imdb_id: !!metadata.imdb_id && !!formData.imdb_id,
+        })
+        setShowOverrideDialog(true)
+        setFetchingMetadata(false)
+        setFetchingSource(null)
+        return
+      }
+
+      // No existing data, apply directly
+      applyMetadata(metadata)
+      toast.success(`Metadata fetched successfully from ${source.toUpperCase()}`)
+    } catch (error) {
+      console.error("Error fetching metadata:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to fetch metadata")
+    } finally {
+      setFetchingMetadata(false)
+      setFetchingSource(null)
+    }
+  }
+
+  const applyMetadata = (metadata: any, fieldsToOverride?: Record<string, boolean>) => {
+    const fetchedGenres = metadata.genre 
+      ? (Array.isArray(metadata.genre) 
+          ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
+          : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
+      : []
+    const fetchedLanguages = metadata.language 
+      ? (Array.isArray(metadata.language)
+          ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
+          : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
+      : []
+    
+    setFormData((prev) => {
+      // Handle genres - merge if not overriding, replace if overriding
+      let finalGenres: string[] = []
+      if (fieldsToOverride?.genre && fetchedGenres.length > 0) {
+        // Override: use fetched genres
+        finalGenres = fetchedGenres
+      } else if (fieldsToOverride?.genre === false) {
+        // Don't override: keep existing
+        finalGenres = prev.genre && Array.isArray(prev.genre) ? prev.genre : []
+      } else {
+        // Merge (default behavior when no override specified)
+        const existingGenres = prev.genre && Array.isArray(prev.genre) ? prev.genre : []
+        const mergedGenres = [...existingGenres]
+        fetchedGenres.forEach((g: string) => {
+          const normalized = g.toLowerCase()
+          if (!mergedGenres.some((eg: string) => eg.toLowerCase() === normalized)) {
+            mergedGenres.push(g)
+          }
+        })
+        finalGenres = mergedGenres
+      }
+      
+      // Handle languages - merge if not overriding, replace if overriding
+      let finalLanguages: string[] = []
+      if (fieldsToOverride?.language && fetchedLanguages.length > 0) {
+        // Override: use fetched languages
+        finalLanguages = fetchedLanguages
+      } else if (fieldsToOverride?.language === false) {
+        // Don't override: keep existing
+        finalLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
+      } else {
+        // Merge (default behavior when no override specified)
+        const existingLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
+        const mergedLanguages = [...existingLanguages]
+        fetchedLanguages.forEach((l: string) => {
+          const normalized = l.toLowerCase()
+          if (!mergedLanguages.some((el: string) => el.toLowerCase() === normalized)) {
+            mergedLanguages.push(l)
+          }
+        })
+        finalLanguages = mergedLanguages
+      }
+      
+      const genreText = finalGenres.length > 0 ? finalGenres.join(", ") : ""
+      const languageText = finalLanguages.length > 0 ? finalLanguages.join(", ") : ""
+      setGenreInput(genreText)
+      setLanguageInput(languageText)
+      
+      return {
+        ...prev,
+        title: (fieldsToOverride?.title && metadata.title) ? metadata.title : prev.title,
+        poster_url: (fieldsToOverride?.poster_url && metadata.poster_url) ? metadata.poster_url : prev.poster_url,
+        genre: finalGenres.length > 0 ? finalGenres : null,
+        language: finalLanguages.length > 0 ? finalLanguages : null,
+        average_rating: (fieldsToOverride?.average_rating && metadata.average_rating !== null) ? metadata.average_rating : prev.average_rating,
+        length: (fieldsToOverride?.length && metadata.length) ? metadata.length : prev.length,
+        episodes: (fieldsToOverride?.episodes && metadata.episodes !== null) ? metadata.episodes : prev.episodes,
+        imdb_id: (fieldsToOverride?.imdb_id && metadata.imdb_id) ? metadata.imdb_id : prev.imdb_id,
+      }
+    })
+  }
+
+  const handleConfirmOverride = () => {
+    if (pendingMetadata) {
+      applyMetadata(pendingMetadata, overrideFields)
+      toast.success(`Metadata fetched successfully from ${fetchingSource?.toUpperCase() || "API"}`)
+    }
+    setShowOverrideDialog(false)
+    setPendingMetadata(null)
+  }
+
+  const handleCancelOverride = () => {
+    setShowOverrideDialog(false)
+    setPendingMetadata(null)
+  }
+
   if (!entry) return null
 
   return (
@@ -314,13 +536,56 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
               <Label htmlFor="edit-title" className="text-sm font-mono">
                 Title <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="edit-title"
-                value={formData.title || ""}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Enter title"
-                required
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="edit-title"
+                  value={formData.title || ""}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Enter title"
+                  required
+                  className="flex-1"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFetchMetadata("omdb")}
+                    disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
+                  >
+                    {fetchingMetadata && fetchingSource === "omdb" ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Fetching...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        OMDB
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFetchMetadata("tmdb")}
+                    disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
+                  >
+                    {fetchingMetadata && fetchingSource === "tmdb" ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Fetching...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        TMDB
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Medium and Status */}
@@ -809,6 +1074,239 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Override Confirmation Dialog */}
+      <Dialog open={showOverrideDialog} onOpenChange={setShowOverrideDialog}>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Select Fields to Override</DialogTitle>
+            <DialogDescription>
+              Choose which metadata fields you want to override with the fetched data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2 flex-1 overflow-y-auto min-h-0">
+            {pendingMetadata && (
+              <div className="space-y-2">
+                {pendingMetadata.title && formData.title && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-title"
+                      checked={overrideFields.title}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, title: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-title" className="text-sm font-medium cursor-pointer block mb-1">
+                        Title
+                      </label>
+                      <div className="text-xs text-muted-foreground break-words">
+                        {pendingMetadata.title}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.poster_url && formData.poster_url && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-poster"
+                      checked={overrideFields.poster_url}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, poster_url: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-poster" className="text-sm font-medium cursor-pointer block mb-1">
+                        Poster URL
+                      </label>
+                      <div className="text-xs text-muted-foreground break-all">
+                        {pendingMetadata.poster_url}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.genre && formData.genre && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-genre"
+                      checked={overrideFields.genre}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, genre: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-genre" className="text-sm font-medium cursor-pointer block mb-1">
+                        Genre
+                      </label>
+                      <div className="text-xs text-muted-foreground break-words">
+                        {Array.isArray(pendingMetadata.genre) 
+                          ? pendingMetadata.genre.join(", ")
+                          : pendingMetadata.genre}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.language && formData.language && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-language"
+                      checked={overrideFields.language}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, language: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-language" className="text-sm font-medium cursor-pointer block mb-1">
+                        Language
+                      </label>
+                      <div className="text-xs text-muted-foreground break-words">
+                        {Array.isArray(pendingMetadata.language)
+                          ? pendingMetadata.language.join(", ")
+                          : pendingMetadata.language}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.average_rating !== null && formData.average_rating !== null && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-rating"
+                      checked={overrideFields.average_rating}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, average_rating: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-rating" className="text-sm font-medium cursor-pointer block mb-1">
+                        Average Rating
+                      </label>
+                      <div className="text-xs text-muted-foreground">
+                        {pendingMetadata.average_rating}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.length && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-length"
+                      checked={overrideFields.length}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, length: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-length" className="text-sm font-medium cursor-pointer block mb-1">
+                        Length
+                      </label>
+                      <div className="text-xs text-muted-foreground break-words">
+                        {pendingMetadata.length}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.episodes !== null && formData.episodes !== null && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-episodes"
+                      checked={overrideFields.episodes}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, episodes: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-episodes" className="text-sm font-medium cursor-pointer block mb-1">
+                        Episodes
+                      </label>
+                      <div className="text-xs text-muted-foreground">
+                        {pendingMetadata.episodes}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {pendingMetadata.imdb_id && formData.imdb_id && (
+                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="override-imdb"
+                      checked={overrideFields.imdb_id}
+                      onChange={(e) => setOverrideFields({ ...overrideFields, imdb_id: e.target.checked })}
+                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <label htmlFor="override-imdb" className="text-sm font-medium cursor-pointer block mb-1">
+                        IMDb ID
+                      </label>
+                      <div className="text-xs text-muted-foreground break-all">
+                        {pendingMetadata.imdb_id}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2 flex-shrink-0 border-t pt-4 mt-4">
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // Select all
+                  setOverrideFields({
+                    title: true,
+                    poster_url: true,
+                    genre: true,
+                    language: true,
+                    average_rating: true,
+                    length: true,
+                    episodes: true,
+                    imdb_id: true,
+                  })
+                }}
+                className="flex-1 sm:flex-initial"
+              >
+                Select All
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // Deselect all
+                  setOverrideFields({
+                    title: false,
+                    poster_url: false,
+                    genre: false,
+                    language: false,
+                    average_rating: false,
+                    length: false,
+                    episodes: false,
+                    imdb_id: false,
+                  })
+                }}
+                className="flex-1 sm:flex-initial"
+              >
+                Deselect All
+              </Button>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button type="button" variant="outline" onClick={handleCancelOverride} className="flex-1 sm:flex-initial">
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleConfirmOverride}
+                disabled={!Object.values(overrideFields).some(v => v)}
+                className="flex-1 sm:flex-initial"
+              >
+                Apply Selected
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
