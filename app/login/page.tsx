@@ -46,11 +46,20 @@ function LoginPageContent() {
         body: JSON.stringify({ email }),
       })
 
-      const checkData = await checkResponse.json()
-
       if (!checkResponse.ok) {
-        throw new Error(checkData.error || "Failed to verify user")
+        // Try to parse error message, but handle empty responses
+        let errorMessage = "Failed to verify user"
+        try {
+          const errorData = await checkResponse.json()
+          errorMessage = errorData.error || errorMessage
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = checkResponse.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
       }
+
+      const checkData = await checkResponse.json()
 
       if (!checkData.exists) {
         toast.error("This email is not registered. Please contact the administrator.")
