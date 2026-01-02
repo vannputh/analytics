@@ -386,6 +386,69 @@ export type BookEntryUpdate = Database['public']['Tables']['book_entries']['Upda
 export type MusicEntryInsert = Database['public']['Tables']['music_entries']['Insert']
 export type MusicEntryUpdate = Database['public']['Tables']['music_entries']['Update']
 
+// Item ordered with optional price and image
+export type ItemOrdered = {
+  name: string
+  price: number | null
+  image_url: string | null
+}
+
+// Food entry type
+export type FoodEntry = {
+  id: string
+  name: string
+  visit_date: string
+  category: string | null
+  address: string | null
+  google_maps_url: string | null
+  latitude: number | null
+  longitude: number | null
+  neighborhood: string | null
+  city: string | null
+  country: string | null
+  instagram_handle: string | null
+  website_url: string | null
+  items_ordered: ItemOrdered[] | null
+  favorite_item: string | null
+  overall_rating: number | null
+  food_rating: number | null
+  ambiance_rating: number | null
+  service_rating: number | null
+  value_rating: number | null
+  total_price: number | null
+  currency: string | null
+  price_level: string | null
+  cuisine_type: string[] | null
+  tags: string[] | null
+  would_return: boolean | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type FoodEntryInsert = Omit<FoodEntry, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export type FoodEntryUpdate = Partial<Omit<FoodEntry, 'id'>>
+
+// Food entry image type
+export type FoodEntryImage = {
+  id: string
+  food_entry_id: string
+  storage_path: string
+  is_primary: boolean
+  caption: string | null
+  created_at: string
+}
+
+export type FoodEntryImageInsert = Omit<FoodEntryImage, 'id' | 'created_at'> & {
+  id?: string
+  created_at?: string
+}
+
 // Medium types for filtering
 export const VISUAL_MEDIA_TYPES = ["Movie", "TV Show", "Podcast", "Live Theatre"] as const
 export const TEXT_MEDIA_TYPES = [] as const // Books moved to separate table

@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/client"
-import { Table2, BarChart3, Plus, LogOut, Film, Book, Music, ChevronDown, Check } from "lucide-react"
+import { Table2, BarChart3, Plus, LogOut, Film, Book, Music, Utensils, ChevronDown, Check, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import {
   DropdownMenu,
@@ -22,6 +22,7 @@ const WORKSPACES = {
   movies: { label: "Movies & TV", icon: Film, path: "/movies" },
   books: { label: "Books", icon: Book, path: "/books" },
   music: { label: "Music", icon: Music, path: "/music" },
+  food: { label: "Food & Drinks", icon: Utensils, path: "/food" },
 } as const
 
 type WorkspaceKey = keyof typeof WORKSPACES
@@ -107,8 +108,12 @@ export function PageHeader({ title }: PageHeaderProps) {
             className="px-2 sm:px-3"
           >
             <Link href={currentWorkspace.path}>
-              <Table2 className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Entries</span>
+              {currentWorkspaceKey === "food" ? (
+                <Calendar className="h-4 w-4 sm:mr-1.5" />
+              ) : (
+                <Table2 className="h-4 w-4 sm:mr-1.5" />
+              )}
+              <span className="hidden sm:inline">{currentWorkspaceKey === "food" ? "Calendar" : "Entries"}</span>
             </Link>
           </Button>
 
