@@ -413,8 +413,8 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
         </Card>
       </div>
 
-      {/* Tertiary row: Pie charts - 2x2 grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Tertiary row: Pie charts - 3 columns */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">
@@ -426,16 +426,7 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">
-              By Medium
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <GenrePieChart data={metrics.countByMedium} title="Medium" />
-          </CardContent>
-        </Card>
+
 
         <Card>
           <CardHeader className="pb-2">

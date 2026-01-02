@@ -12,6 +12,54 @@ export interface EpisodeWatchRecord {
   watched_at: string;
 }
 
+export type BookEntry = {
+  id: string
+  title: string
+  author: string | null
+  publisher: string | null
+  isbn: string | null
+  pages: number | null
+  format: string | null
+  genre: string[] | null
+  language: string[] | null
+  series_name: string | null
+  series_number: number | null
+  status: string | null
+  platform: string | null
+  price: number | null
+  my_rating: number | null
+  average_rating: number | null
+  start_date: string | null
+  finish_date: string | null
+  notes: string | null
+  cover_url: string | null
+  goodreads_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type MusicEntry = {
+  id: string
+  title: string
+  artist: string | null
+  album: string | null
+  type: string | null
+  duration_minutes: number | null
+  genre: string[] | null
+  release_date: string | null
+  platform: string | null
+  status: string | null
+  price: number | null
+  my_rating: number | null
+  listen_count: number | null
+  spotify_id: string | null
+  apple_music_id: string | null
+  cover_url: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -20,6 +68,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      book_entries: {
+        Row: BookEntry
+        Insert: Omit<BookEntry, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<BookEntry, 'id'>>
+      }
+      music_entries: {
+        Row: MusicEntry
+        Insert: Omit<MusicEntry, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<MusicEntry, 'id'>>
+      }
       media_entries: {
         Row: {
           average_rating: number | null
@@ -312,10 +378,18 @@ export type UserPreference = Tables<"user_preferences">
 export type UserPreferenceInsert = TablesInsert<"user_preferences">
 export type UserPreferenceUpdate = TablesUpdate<"user_preferences">
 
+// Book types
+export type BookEntryInsert = Database['public']['Tables']['book_entries']['Insert']
+export type BookEntryUpdate = Database['public']['Tables']['book_entries']['Update']
+
+// Music types
+export type MusicEntryInsert = Database['public']['Tables']['music_entries']['Insert']
+export type MusicEntryUpdate = Database['public']['Tables']['music_entries']['Update']
+
 // Medium types for filtering
-export const VISUAL_MEDIA_TYPES = ["Movie", "TV Show", "Podcast"] as const
-export const TEXT_MEDIA_TYPES = ["Book"] as const
-export const ALL_MEDIUM_TYPES = ["Movie", "TV Show", "Book", "Game", "Podcast", "Live Theatre"] as const
+export const VISUAL_MEDIA_TYPES = ["Movie", "TV Show", "Podcast", "Live Theatre"] as const
+export const TEXT_MEDIA_TYPES = [] as const // Books moved to separate table
+export const ALL_MEDIUM_TYPES = ["Movie", "TV Show", "Game", "Podcast", "Live Theatre"] as const
 
 export type VisualMediaType = (typeof VISUAL_MEDIA_TYPES)[number]
 export type TextMediaType = (typeof TEXT_MEDIA_TYPES)[number]

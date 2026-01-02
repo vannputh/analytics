@@ -52,10 +52,10 @@ export function StatusHistoryDialog({
     setLoading(true);
     try {
       const result = await getStatusHistory(mediaEntryId);
-      if (result.success && result.data) {
+      if (result.success) {
         setHistory(result.data);
       } else {
-        toast.error(result.error || "Failed to load history");
+        toast.error(result.error);
       }
     } catch (error) {
       console.error("Error loading history:", error);

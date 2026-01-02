@@ -113,7 +113,7 @@ function AddPageContent() {
   useEffect(() => {
     async function fetchOptions() {
       const result = await getUniqueFieldValues()
-      if (result.success && result.data) {
+      if (result.success) {
         setDropdownOptions(result.data)
       }
     }
@@ -136,10 +136,11 @@ function AddPageContent() {
 
         if (cancelled) return
 
-        if (!result.success || !result.data) {
+        if (!result.success) {
           console.error("Error fetching entry:", result.error)
           toast.error(result.error || "Failed to load entry")
-          router.push("/analytics")
+
+          router.push("/movies/analytics")
           return
         }
 
@@ -194,7 +195,7 @@ function AddPageContent() {
         if (cancelled) return
         console.error("Error fetching entry:", err)
         toast.error("Failed to load entry")
-        router.push("/analytics")
+        router.push("/movies/analytics")
       } finally {
         if (!cancelled) {
           setFetching(false)
@@ -272,7 +273,7 @@ function AddPageContent() {
           toast.success("Entry updated successfully")
           // Use returnTo URL if provided, otherwise default to /entries
           const returnTo = searchParams.get("returnTo")
-          router.push(returnTo || "/entries")
+          router.push(returnTo || "/movies")
         } else {
           toast.error(result.error || "Failed to update entry")
         }
@@ -280,7 +281,7 @@ function AddPageContent() {
         const result = await createEntry(entryData)
         if (result.success) {
           toast.success("Entry created successfully")
-          router.push("/analytics")
+          router.push("/movies/analytics")
         } else {
           toast.error(result.error || "Failed to create entry")
         }

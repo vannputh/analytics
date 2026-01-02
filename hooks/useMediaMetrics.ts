@@ -88,8 +88,8 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
     for (const entry of data) {
       const month = getMonthKey(entry.finish_date) || getMonthKey(entry.start_date)
       const medium = entry.medium
-      const isVisualMedia = medium && VISUAL_MEDIA_TYPES.includes(medium as any)
-      const isTextMedia = medium && TEXT_MEDIA_TYPES.includes(medium as any)
+      const isVisualMedia = medium && (VISUAL_MEDIA_TYPES as readonly string[]).includes(medium)
+      const isTextMedia = medium && (TEXT_MEDIA_TYPES as readonly string[]).includes(medium)
 
       // Financial calculations
       const price = parsePrice(entry.price)

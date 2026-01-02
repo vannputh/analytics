@@ -51,6 +51,7 @@ import { MediaDetailsDialog } from "@/components/media-details-dialog";
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { EpisodeWatchRecord } from "@/lib/database.types";
 
@@ -223,22 +224,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     }
   }, [showSelectMode]);
 
-  const getStatusColor = (status: string | null) => {
-    switch (status) {
-      case "Finished":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "Watching":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "On Hold":
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case "Dropped":
-        return "bg-red-500/10 text-red-500 border-red-500/20";
-      case "Plan to Watch":
-        return "bg-purple-500/10 text-purple-500 border-purple-500/20";
-      default:
-        return "";
-    }
-  };
+
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -427,8 +413,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
             if (meta.imdb_id && !entry.imdb_id) updateData.imdb_id = meta.imdb_id;
 
             if (Object.keys(updateData).length > 0) {
-              const { error } = await supabase
-                .from("media_entries")
+              const { error } = await (supabase
+                .from("media_entries" as any) as any)
                 .update(updateData)
                 .eq("id", entry.id);
 
@@ -569,8 +555,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
 
             const entryUpdateData: Partial<MediaEntry> = { ...updateData, genre: mergedGenres };
 
-            const { error } = await supabase
-              .from("media_entries")
+            const { error } = await (supabase
+              .from("media_entries" as any) as any)
               .update(entryUpdateData)
               .eq("id", entry.id);
 
@@ -590,8 +576,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         }
       } else {
         // No genre update, use batch update for other fields
-        const { error } = await supabase
-          .from("media_entries")
+        const { error } = await (supabase
+          .from("media_entries" as any) as any)
           .update(updateData)
           .in("id", Array.from(selectedEntries));
 
@@ -700,7 +686,88 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         </div>
       )}
 
-      <div className="rounded-md border overflow-x-auto">
+      {/* Mobile Card View - visible on small screens */}
+      <div className="grid grid-cols-2 gap-3 sm:hidden">
+        {sortedEntries.map((entry) => (
+          <Card
+            key={entry.id}
+            className={`cursor-pointer hover:bg-muted/50 transition-colors ${showSelectMode && selectedEntries.has(entry.id) ? "ring-2 ring-primary" : ""}`}
+            onClick={() => {
+              if (showSelectMode) {
+                toggleSelectEntry(entry.id);
+              } else {
+                setSelectedEntryForDetails(entry);
+                setDetailsDialogOpen(true);
+              }
+            }}
+          >
+            <CardContent className="p-3">
+              <div className="flex gap-3">
+                {/* Poster */}
+                <div className="w-14 h-20 relative bg-muted rounded flex-shrink-0 overflow-hidden">
+                  <SafeImage
+                    src={entry.poster_url || ""}
+                    alt={entry.title}
+                    fill
+                    className="object-cover"
+                    fallbackElement={
+                      <span className="text-xl flex items-center justify-center h-full">
+                        {getPlaceholderPoster(entry.type)}
+                      </span>
+                    }
+                  />
+                  {showSelectMode && selectedEntries.has(entry.id) && (
+                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                      <CheckSquare className="h-5 w-5 text-primary" />
+                    </div>
+                  )}
+                </div>
+                {/* Info */}
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <h3 className="font-medium text-sm leading-tight line-clamp-2">{entry.title}</h3>
+                  <div className="mt-1">
+                    {(() => {
+                      const variants = {
+                        "Finished": "default",
+                        "Watching": "secondary",
+                        "On Hold": "outline",
+                        "Dropped": "destructive",
+                        "Plan to Watch": "outline",
+                      } as const;
+                      return (
+                        <Badge
+                          variant={variants[entry.status as keyof typeof variants] || "outline"}
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          {entry.status || "N/A"}
+                        </Badge>
+                      );
+                    })()}
+                  </div>
+                  <div className="mt-auto pt-1 flex items-center justify-between">
+                    {entry.my_rating ? (
+                      <span className="text-xs font-medium">★ {entry.my_rating}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                    {entry.medium && (
+                      <span className="text-[10px] text-muted-foreground">{entry.medium}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {sortedEntries.length === 0 && (
+          <div className="col-span-2 text-center py-8 text-muted-foreground">
+            No entries found. Add your first media entry!
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Table View - hidden on mobile */}
+      <div className="rounded-md border overflow-x-auto hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -976,9 +1043,21 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   {visibleColumns.has("status") && (
                     <TableCell className="py-3">
                       <div className="flex items-center gap-2">
-                        <Badge className={`${getStatusColor(entry.status)} whitespace-nowrap`}>
-                          {entry.status || "N/A"}
-                        </Badge>
+                        {(() => {
+                          const variants = {
+                            "Finished": "default",
+                            "Watching": "secondary",
+                            "On Hold": "outline",
+                            "Dropped": "destructive",
+                            "Plan to Watch": "outline",
+                          } as const;
+
+                          return (
+                            <Badge variant={variants[entry.status as keyof typeof variants] || "outline"} className="whitespace-nowrap">
+                              {entry.status || "N/A"}
+                            </Badge>
+                          );
+                        })()}
                         {(entry.status === "Dropped" || entry.status === "On Hold") && (
                           <Button
                             variant="ghost"
@@ -1005,24 +1084,22 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   {visibleColumns.has("my_rating") && (
                     <TableCell className="py-3">
                       {entry.my_rating ? (
-                        <div className="flex items-center gap-1">
-                          <span className="font-semibold">{entry.my_rating}</span>
-                          <span className="text-muted-foreground text-sm">/10</span>
+                        <div className="font-medium">
+                          ★ {entry.my_rating % 1 === 0 ? entry.my_rating : entry.my_rating.toFixed(1)}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">N/A</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                   )}
                   {visibleColumns.has("average_rating") && (
                     <TableCell className="py-3">
                       {entry.average_rating ? (
-                        <div className="flex items-center gap-1">
-                          <span className="font-semibold">{entry.average_rating}</span>
-                          <span className="text-muted-foreground text-sm">/10</span>
+                        <div className="font-medium text-sm">
+                          ★ {entry.average_rating % 1 === 0 ? entry.average_rating : entry.average_rating.toFixed(1)}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">N/A</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                   )}

@@ -35,6 +35,25 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async redirects() {
+    return [
+      {
+        source: "/entries",
+        destination: "/movies",
+        permanent: true,
+      },
+      {
+        source: "/library",
+        destination: "/movies",
+        permanent: true,
+      },
+      {
+        source: "/watching",
+        destination: "/movies/watching",
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig
