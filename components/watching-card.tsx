@@ -121,8 +121,8 @@ export function WatchingCard({ entry, onUpdate }: WatchingCardProps) {
                 updates.finish_date = new Date().toISOString().split('T')[0];
             }
 
-            const { data, error } = await supabase
-                .from("media_entries")
+            const { data, error } = await (supabase
+                .from("media_entries" as any) as any)
                 .update(updates)
                 .eq("id", entry.id)
                 .select()

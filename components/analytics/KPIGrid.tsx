@@ -4,7 +4,6 @@ import {
   DollarSign,
   Clock,
   Calendar,
-  BookOpen,
   Globe,
   Film,
   Star,
@@ -62,8 +61,8 @@ function KPICard({ label, value, subValue, icon, trend, className }: KPICardProp
 
 export function KPIGrid({ metrics }: KPIGridProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      {/* Row 1: Financial & Time */}
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Row 1: High Level Stats */}
       <KPICard
         label="Total Spent"
         value={formatCurrency(metrics.totalSpent)}
@@ -82,8 +81,6 @@ export function KPIGrid({ metrics }: KPIGridProps) {
         subValue="spent consuming media"
         icon={<Calendar className="h-8 w-8" />}
       />
-
-      {/* Row 2: Counts & Engagement */}
       <KPICard
         label="Items Finished"
         value={formatNumber(metrics.totalItems)}
@@ -93,23 +90,13 @@ export function KPIGrid({ metrics }: KPIGridProps) {
         icon={<Layers className="h-8 w-8" />}
       />
       <KPICard
-        label="Pages Read"
-        value={formatNumber(metrics.totalPages)}
-        subValue={metrics.totalPages > 0 ? `${formatNumber(metrics.totalPages / 300)} books (avg)` : "no books tracked"}
-        icon={<BookOpen className="h-8 w-8" />}
-      />
-      <KPICard
-        label="Top Language"
-        value={metrics.topLanguage || "—"}
-        subValue={
-          metrics.topLanguage && metrics.countByLanguage[metrics.topLanguage]
-            ? `${metrics.countByLanguage[metrics.topLanguage]} items`
-            : undefined
-        }
-        icon={<Globe className="h-8 w-8" />}
+        label="Avg Rating"
+        value={metrics.averageRating > 0 ? formatNumber(metrics.averageRating, 1) : "—"}
+        subValue={metrics.averageRating > 0 ? "out of 10" : "no ratings"}
+        icon={<Star className="h-8 w-8" />}
       />
 
-      {/* Row 3: Diversity & Quality */}
+      {/* Row 2: Diversity & Metadata */}
       <KPICard
         label="Top Genre"
         value={metrics.topGenre || "—"}
@@ -121,15 +108,13 @@ export function KPIGrid({ metrics }: KPIGridProps) {
         icon={<Film className="h-8 w-8" />}
       />
       <KPICard
-        label="Avg Rating"
-        value={metrics.averageRating > 0 ? formatNumber(metrics.averageRating, 1) : "—"}
-        subValue={metrics.averageRating > 0 ? "out of 10" : "no ratings"}
-        icon={<Star className="h-8 w-8" />}
-      />
-      <KPICard
-        label="Languages"
-        value={formatNumber(Object.keys(metrics.countByLanguage).length)}
-        subValue="different languages"
+        label="Top Language"
+        value={metrics.topLanguage || "—"}
+        subValue={
+          metrics.topLanguage && metrics.countByLanguage[metrics.topLanguage]
+            ? `${metrics.countByLanguage[metrics.topLanguage]} items`
+            : undefined
+        }
         icon={<Globe className="h-8 w-8" />}
       />
       <KPICard
@@ -139,16 +124,16 @@ export function KPIGrid({ metrics }: KPIGridProps) {
         icon={<TrendingUp className="h-8 w-8" />}
       />
       <KPICard
+        label="Languages"
+        value={formatNumber(Object.keys(metrics.countByLanguage).length)}
+        subValue="different languages"
+        icon={<Globe className="h-8 w-8" />}
+      />
+      <KPICard
         label="Platforms"
         value={formatNumber(Object.keys(metrics.countByPlatform).length)}
         subValue={metrics.topPlatform ? `top: ${metrics.topPlatform}` : "no platform data"}
         icon={<Layers className="h-8 w-8" />}
-      />
-      <KPICard
-        label="Media Types"
-        value={formatNumber(Object.keys(metrics.countByMedium).length)}
-        subValue="different mediums"
-        icon={<Film className="h-8 w-8" />}
       />
     </div>
   )

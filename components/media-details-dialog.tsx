@@ -57,7 +57,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { updateEntry, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
+import { updateEntry, createEntry, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -128,64 +128,78 @@ export function MediaDetailsDialog({
 
     // Load entry data
     useEffect(() => {
-        if (open && entry) {
-            // Handle language parsing (mixed types in DB: text, json string, etc)
-            let initialLanguage: string[] = [];
-            const val = entry.language as unknown;
-            if (Array.isArray(val)) {
-                initialLanguage = val;
-            } else if (typeof val === "string") {
-                if (val.trim().startsWith("[")) {
+        if (open) {
+            if (entry) {
+                // Handle language parsing (mixed types in DB: text, json string, etc)
+                let initialLanguage: string[] = [];
+                const val = entry.language as unknown;
+                if (Array.isArray(val)) {
+                    initialLanguage = val;
+                } else if (typeof val === "string") {
+                    if (val.trim().startsWith("[")) {
+                        try {
+                            const parsed = JSON.parse(val);
+                            if (Array.isArray(parsed)) initialLanguage = parsed;
+                            else initialLanguage = [val];
+                        } catch {
+                            initialLanguage = [val];
+                        }
+                    } else {
+                        initialLanguage = val.split(",").map(s => s.trim().replace(/['"]+/g, ''));
+                    }
+                }
+
+                setFormData({
+                    title: entry.title,
+                    status: entry.status,
+                    episodes: entry.episodes,
+                    episodes_watched: entry.episodes_watched || 0,
+                    my_rating: entry.my_rating,
+                    poster_url: entry.poster_url,
+                    medium: entry.medium,
+                    type: entry.type,
+                    platform: entry.platform,
+                    season: entry.season,
+                    length: entry.length,
+                    language: initialLanguage,
+                    genre: entry.genre,
+                    imdb_id: entry.imdb_id,
+                    start_date: entry.start_date,
+                    finish_date: entry.finish_date,
+                    last_watched_at: entry.last_watched_at,
+                    time_taken: entry.time_taken,
+                    average_rating: entry.average_rating,
+                    price: entry.price,
+                });
+                setActiveTab("general");
+                loadStatusHistory(entry.id);
+                // Load episode history
+                if (entry.episode_history) {
                     try {
-                        const parsed = JSON.parse(val);
-                        if (Array.isArray(parsed)) initialLanguage = parsed;
-                        else initialLanguage = [val];
-                    } catch {
-                        initialLanguage = [val];
+                        const parsed = JSON.parse(JSON.stringify(entry.episode_history)) as EpisodeWatchRecord[];
+                        setEpisodeHistory(parsed.sort((a, b) => b.episode - a.episode));
+                    } catch (e) {
+                        console.error("Failed to parse episode history", e);
+                        setEpisodeHistory([]);
                     }
                 } else {
-                    initialLanguage = val.split(",").map(s => s.trim().replace(/['"]+/g, ''));
-                }
-            }
-
-            setFormData({
-                title: entry.title,
-                status: entry.status,
-                episodes: entry.episodes,
-                episodes_watched: entry.episodes_watched || 0,
-                my_rating: entry.my_rating,
-                poster_url: entry.poster_url,
-                medium: entry.medium,
-                type: entry.type,
-                platform: entry.platform,
-                season: entry.season,
-                length: entry.length,
-                language: initialLanguage,
-                genre: entry.genre,
-                imdb_id: entry.imdb_id,
-                start_date: entry.start_date,
-                finish_date: entry.finish_date,
-                last_watched_at: entry.last_watched_at,
-                time_taken: entry.time_taken,
-                average_rating: entry.average_rating,
-                price: entry.price,
-            });
-            setActiveTab("general");
-            loadStatusHistory(entry.id);
-            // Load episode history
-            if (entry.episode_history) {
-                try {
-                    const parsed = JSON.parse(JSON.stringify(entry.episode_history)) as EpisodeWatchRecord[];
-                    setEpisodeHistory(parsed.sort((a, b) => b.episode - a.episode));
-                } catch (e) {
-                    console.error("Failed to parse episode history", e);
                     setEpisodeHistory([]);
                 }
+                // Set next episode number
+                setNewEpisodeNumber((entry.episodes_watched || 0) + 1);
             } else {
+                // New entry - initialize with defaults
+                setFormData({
+                    title: "",
+                    status: "Planned",
+                    medium: "Movie",
+                    episodes_watched: 0,
+                });
+                setActiveTab("general");
                 setEpisodeHistory([]);
+                setStatusHistory([]);
+                setNewEpisodeNumber(1);
             }
-            // Set next episode number
-            setNewEpisodeNumber((entry.episodes_watched || 0) + 1);
         }
     }, [open, entry]);
 
@@ -193,7 +207,7 @@ export function MediaDetailsDialog({
     useEffect(() => {
         async function fetchOptions() {
             const result = await getUniqueFieldValues();
-            if (result.success && result.data) {
+            if (result.success) {
                 setDropdownOptions(result.data);
             }
         }
@@ -205,7 +219,7 @@ export function MediaDetailsDialog({
         setHistoryLoading(true);
         try {
             const res = await getStatusHistory(id);
-            if (res.success && res.data) {
+            if (res.success) {
                 setStatusHistory(res.data);
             }
         } catch (e) {
@@ -218,12 +232,15 @@ export function MediaDetailsDialog({
     // --- Handlers ---
 
     const handleSave = async () => {
-        if (!entry) return;
+        if (!formData.title?.trim()) {
+            toast.error("Title is required");
+            return;
+        }
         setLoading(true);
         try {
             // Prepare payload
             const payload: CreateEntryInput = {
-                title: formData.title || entry.title,
+                title: formData.title.trim(),
                 status: formData.status,
                 episodes_watched: formData.episodes_watched,
                 episodes: formData.episodes,
@@ -245,13 +262,26 @@ export function MediaDetailsDialog({
                 average_rating: formData.average_rating,
             };
 
-            const result = await updateEntry(entry.id, payload);
-            if (result.success && result.data) {
-                toast.success("Entry updated");
-                onSuccess?.(result.data);
-                onOpenChange(false);
+            if (entry) {
+                // Update existing entry
+                const result = await updateEntry(entry.id, payload);
+                if (result.success) {
+                    toast.success("Entry updated");
+                    onSuccess?.(result.data);
+                    onOpenChange(false);
+                } else {
+                    toast.error(result.error);
+                }
             } else {
-                toast.error(result.error || "Failed to update");
+                // Create new entry
+                const result = await createEntry(payload);
+                if (result.success) {
+                    toast.success("Entry created");
+                    onSuccess?.(result.data);
+                    onOpenChange(false);
+                } else {
+                    toast.error(result.error);
+                }
             }
         } catch (error) {
             console.error(error);
@@ -383,12 +413,12 @@ export function MediaDetailsDialog({
                 episode_history: updatedHistory as any,
                 last_watched_at: newRecord.watched_at,
             });
-            if (result.success && result.data) {
+            if (result.success) {
                 toast.success(`Episode ${newEpisodeNumber} recorded`);
                 setNewEpisodeNumber(newEpisodeNumber + 1);
                 onSuccess?.(result.data);
             } else {
-                toast.error(result.error || "Failed to add episode");
+                toast.error(result.error);
             }
         } catch (error) {
             console.error(error);
@@ -411,11 +441,11 @@ export function MediaDetailsDialog({
                 episodes_watched: newEpisodesWatched,
                 episode_history: updatedHistory as any,
             });
-            if (result.success && result.data) {
+            if (result.success) {
                 toast.success(`Episode ${recordToDelete.episode} deleted`);
                 onSuccess?.(result.data);
             } else {
-                toast.error(result.error || "Failed to delete episode");
+                toast.error(result.error);
             }
         } catch (error) {
             console.error(error);
@@ -447,11 +477,11 @@ export function MediaDetailsDialog({
             const result = await updateEntry(entry.id, {
                 episode_history: updatedHistory as any,
             });
-            if (result.success && result.data) {
+            if (result.success) {
                 toast.success("Episode date updated");
                 onSuccess?.(result.data);
             } else {
-                toast.error(result.error || "Failed to update episode");
+                toast.error(result.error);
             }
         } catch (error) {
             console.error(error);
@@ -501,26 +531,71 @@ export function MediaDetailsDialog({
 
     // --- Render Helpers ---
 
-    if (!entry) return null;
+    const isNewEntry = !entry;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl p-0 h-[85vh] flex flex-col gap-0 overflow-hidden">
-                <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                    {/* Sidebar (Left Column) */}
-                    <div className="w-full md:w-64 bg-muted/30 border-r flex flex-col p-5 gap-5 overflow-y-auto shrink-0">
-                        {/* Poster */}
-                        <div className="aspect-[2/3] relative rounded-lg overflow-hidden border shadow-sm bg-muted self-center w-36 md:w-full group shrink-0">
+            <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
+                {/* Mobile Header - visible on small screens */}
+                <div className="md:hidden border-b bg-muted/30 p-3">
+                    <div className="flex items-center gap-3">
+                        {/* Small Poster */}
+                        <div className="w-12 h-16 relative rounded overflow-hidden border shadow-sm bg-muted flex-shrink-0 group">
                             {formData.poster_url ? (
                                 <SafeImage
                                     src={formData.poster_url}
-                                    alt={entry.title}
+                                    alt={formData.title || "New Entry"}
+                                    fill
+                                    className="object-cover"
+                                />
+                            ) : (
+                                <div className="flex h-full items-center justify-center text-lg text-muted-foreground">
+                                    {getPlaceholderPoster(formData.type || null)}
+                                </div>
+                            )}
+                        </div>
+                        {/* Title */}
+                        <div className="flex-1 min-w-0">
+                            <h2 className="font-semibold text-base truncate">{isNewEntry ? "Add New Entry" : formData.title}</h2>
+                            {!isNewEntry && entry?.start_date && (
+                                <p className="text-sm text-muted-foreground">{format(parseISO(entry.start_date), "yyyy")}</p>
+                            )}
+                        </div>
+                    </div>
+                    {/* Horizontal Tabs */}
+                    <div className="flex gap-1 mt-3 overflow-x-auto">
+                        {(["general", "advanced", "episodes", "history"] as const).map(tab => (
+                            <Button
+                                key={tab}
+                                variant={activeTab === tab ? "secondary" : "ghost"}
+                                size="sm"
+                                className={cn(
+                                    "h-8 text-xs flex-shrink-0",
+                                    activeTab === tab && "bg-secondary font-medium"
+                                )}
+                                onClick={() => setActiveTab(tab)}
+                            >
+                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
+                    {/* Desktop Sidebar (Left Column) - hidden on mobile */}
+                    <div className="hidden md:flex w-64 bg-muted/30 border-r flex-col p-5 gap-5 overflow-y-auto shrink-0">
+                        {/* Poster */}
+                        <div className="aspect-[2/3] relative rounded-lg overflow-hidden border shadow-sm bg-muted self-center w-full group shrink-0">
+                            {formData.poster_url ? (
+                                <SafeImage
+                                    src={formData.poster_url}
+                                    alt={formData.title || "New Entry"}
                                     fill
                                     className="object-cover"
                                 />
                             ) : (
                                 <div className="flex h-full items-center justify-center text-3xl text-muted-foreground">
-                                    {getPlaceholderPoster(entry.type)}
+                                    {getPlaceholderPoster(formData.type || null)}
                                 </div>
                             )}
 
@@ -558,14 +633,16 @@ export function MediaDetailsDialog({
 
                     {/* Main Content Area (Right Column) */}
                     <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden h-full">
-                        <DialogHeader className="px-6 py-4 border-b shrink-0">
-                            <DialogTitle className="text-xl truncate" title={entry.title}>
-                                {entry.title} <span className="text-muted-foreground font-normal text-base ml-2">({entry.start_date ? format(parseISO(entry.start_date), "yyyy") : "Unknown Year"})</span>
+                        {/* Desktop Header - hidden on mobile */}
+                        <DialogHeader className="hidden md:block px-6 py-4 border-b shrink-0">
+                            <DialogTitle className="text-xl truncate" title={formData.title || "New Entry"}>
+                                {isNewEntry ? "Add New Entry" : formData.title}
+                                {!isNewEntry && <span className="text-muted-foreground font-normal text-base ml-2">({entry?.start_date ? format(parseISO(entry.start_date), "yyyy") : "Unknown Year"})</span>}
                             </DialogTitle>
                         </DialogHeader>
 
                         <ScrollArea className="flex-1">
-                            <div className="p-6">
+                            <div className="p-4 md:p-6">
                                 {/* GENERAL TAB */}
                                 {activeTab === "general" && (
                                     <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">

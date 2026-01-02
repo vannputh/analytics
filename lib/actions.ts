@@ -4,14 +4,26 @@ import { createClient } from '@/lib/supabase/server'
 import { MediaEntry, MediaStatusHistory } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 
+export type ActionResponse<T> =
+  | { success: true; data: T }
+  | { success: false; error: string }
+
+export interface UniqueFieldValues {
+  types: string[]
+  statuses: string[]
+  mediums: string[]
+  platforms: string[]
+  languages: string[]
+}
+
 export type CreateEntryInput = Partial<Omit<MediaEntry, 'id' | 'created_at' | 'updated_at'>> & { title: string }
 
-export async function createEntry(data: CreateEntryInput) {
+export async function createEntry(data: CreateEntryInput): Promise<ActionResponse<MediaEntry>> {
   try {
     const supabase = await createClient()
 
-    const { data: newEntry, error } = await supabase
-      .from('media_entries')
+    const { data: newEntry, error } = await (supabase
+      .from('media_entries' as any) as any)
       .insert(data)
       .select()
       .single()
@@ -23,9 +35,12 @@ export async function createEntry(data: CreateEntryInput) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
-    revalidatePath('/entries')
+    revalidatePath('/entries') // Keep for history/compatibility if needed, or remove
+    revalidatePath('/movies')
     revalidatePath('/analytics')
-    revalidatePath('/library')
+    revalidatePath('/library') // Keep for compatibility
+    revalidatePath('/books')
+    revalidatePath('/music')
 
     return { success: true, data: newEntry }
   } catch (error) {
@@ -37,12 +52,12 @@ export async function createEntry(data: CreateEntryInput) {
   }
 }
 
-export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
+export async function updateEntry(id: string, data: Partial<CreateEntryInput>): Promise<ActionResponse<MediaEntry>> {
   try {
     const supabase = await createClient()
 
-    const { data: updatedEntry, error } = await supabase
-      .from('media_entries')
+    const { data: updatedEntry, error } = await (supabase
+      .from('media_entries' as any) as any)
       .update(data)
       .eq('id', id)
       .select()
@@ -58,6 +73,8 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
+    revalidatePath('/books')
+    revalidatePath('/music')
 
     return { success: true, data: updatedEntry }
   } catch (error) {
@@ -69,7 +86,7 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
   }
 }
 
-export async function getEntry(id: string) {
+export async function getEntry(id: string): Promise<ActionResponse<MediaEntry>> {
   try {
     const supabase = await createClient()
 
@@ -94,7 +111,7 @@ export async function getEntry(id: string) {
   }
 }
 
-export async function deleteEntry(id: string) {
+export async function deleteEntry(id: string): Promise<ActionResponse<void>> {
   try {
     const supabase = await createClient()
 
@@ -113,8 +130,10 @@ export async function deleteEntry(id: string) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
+    revalidatePath('/books')
+    revalidatePath('/music')
 
-    return { success: true }
+    return { success: true, data: undefined }
   } catch (error) {
     console.error('Unexpected error:', error)
     return {
@@ -124,7 +143,7 @@ export async function deleteEntry(id: string) {
   }
 }
 
-export async function batchUploadEntries(entries: CreateEntryInput[]) {
+export async function batchUploadEntries(entries: CreateEntryInput[]): Promise<ActionResponse<MediaEntry[]> & { count?: number; processedCount?: number }> {
   try {
     const supabase = await createClient()
 
@@ -135,8 +154,8 @@ export async function batchUploadEntries(entries: CreateEntryInput[]) {
     for (let i = 0; i < entries.length; i += batchSize) {
       const batch = entries.slice(i, i + batchSize)
 
-      const { data, error } = await supabase
-        .from('media_entries')
+      const { data, error } = await (supabase
+        .from('media_entries' as any) as any)
         .insert(batch)
         .select()
 
@@ -157,6 +176,8 @@ export async function batchUploadEntries(entries: CreateEntryInput[]) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
+    revalidatePath('/books')
+    revalidatePath('/music')
 
     return {
       success: true,
@@ -179,7 +200,7 @@ export async function getEntries(filters?: {
   limit?: number
   offset?: number
   getCount?: boolean
-}) {
+}): Promise<ActionResponse<MediaEntry[]> & { count?: number | null }> {
   try {
     const supabase = await createClient()
 
@@ -194,6 +215,10 @@ export async function getEntries(filters?: {
 
     if (filters?.medium) {
       query = query.eq('medium', filters.medium)
+    } else {
+      // Exclude books from general media entries as they have their own table/view
+      // But only if we aren't explicitly asking for them (though we shouldn't be via this action)
+      query = query.neq('medium', 'Book')
     }
 
     if (filters?.search) {
@@ -305,10 +330,10 @@ export async function getStats() {
 
     for (const entry of entries) {
       // Sum prices
-      totalSpent += entry.price || 0
+      totalSpent += (entry as any).price || 0
 
       // Count mediums
-      const medium = entry.medium || 'Unknown'
+      const medium = (entry as any).medium || 'Unknown'
       mediumCounts[medium] = (mediumCounts[medium] || 0) + 1
     }
 
@@ -333,7 +358,7 @@ export async function getStats() {
   }
 }
 
-export async function getStatusHistory(mediaEntryId: string) {
+export async function getStatusHistory(mediaEntryId: string): Promise<ActionResponse<MediaStatusHistory[]>> {
   try {
     const supabase = await createClient()
 
@@ -360,13 +385,13 @@ export async function getStatusHistory(mediaEntryId: string) {
   }
 }
 
-export async function restartEntry(id: string) {
+export async function restartEntry(id: string): Promise<ActionResponse<MediaEntry>> {
   try {
     const supabase = await createClient()
 
     // Get current entry
-    const { data: entry, error: fetchError } = await supabase
-      .from('media_entries')
+    const { data: entry, error: fetchError } = await (supabase
+      .from('media_entries' as any) as any)
       .select('*')
       .eq('id', id)
       .single()
@@ -384,13 +409,13 @@ export async function restartEntry(id: string) {
     }
 
     // Update status to In Progress and clear finish_date
-    const { data: updatedEntry, error: updateError } = await supabase
-      .from('media_entries')
+    const { data: updatedEntry, error: updateError } = await (supabase
+      .from('media_entries' as any) as any)
       .update({
         status: 'Watching',
         finish_date: null,
         start_date: entry.start_date || new Date().toISOString().split('T')[0],
-      })
+      } as any)
       .eq('id', id)
       .select()
       .single()
@@ -405,6 +430,8 @@ export async function restartEntry(id: string) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
+    revalidatePath('/books')
+    revalidatePath('/music')
 
     return { success: true, data: updatedEntry }
   } catch (error) {
@@ -416,7 +443,7 @@ export async function restartEntry(id: string) {
   }
 }
 
-export async function getUniqueFieldValues() {
+export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueFieldValues>> {
   try {
     const supabase = await createClient()
 
@@ -436,7 +463,7 @@ export async function getUniqueFieldValues() {
     const platforms = new Set<string>()
     const languages = new Set<string>()
 
-    for (const entry of data || []) {
+    for (const entry of (data as any[]) || []) {
       if (entry.type) types.add(entry.type)
       if (entry.status) statuses.add(entry.status)
       if (entry.medium) mediums.add(entry.medium)

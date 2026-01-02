@@ -150,9 +150,9 @@ function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <div className="flex">
-          <div className="p-2 border-r">
+      <PopoverContent className="w-auto p-0 max-h-[80vh] overflow-y-auto" align="start">
+        <div className="flex flex-col sm:flex-row">
+          <div className="p-2 border-b sm:border-b-0 sm:border-r">
             <p className="text-xs text-muted-foreground mb-2 px-2">From</p>
             <Calendar
               mode="single"
@@ -175,11 +175,11 @@ function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
           </div>
         </div>
         <Separator />
-        <div className="p-2 flex gap-2">
+        <div className="p-2 flex flex-wrap gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 min-w-[4rem] h-7 text-xs"
             onClick={() => {
               onChange(null, null)
               setOpen(false)
@@ -190,7 +190,7 @@ function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 min-w-[4rem] h-7 text-xs"
             onClick={() => {
               const now = new Date()
               const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
@@ -202,7 +202,7 @@ function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 min-w-[4rem] h-7 text-xs"
             onClick={() => {
               const now = new Date()
               const startOfYear = new Date(now.getFullYear(), 0, 1)

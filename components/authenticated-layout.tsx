@@ -1,6 +1,9 @@
 "use client"
 
 export function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
-  return <main>{children}</main>
+  return (
+    <div className="min-h-screen bg-background">
+      {children}
+    </div>
+  )
 }
-

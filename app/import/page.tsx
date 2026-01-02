@@ -263,8 +263,8 @@ export default function ImportPage() {
       for (const entry of cleanedData) {
         try {
           // Check if entry exists (by title and season)
-          let query = supabase
-            .from("media_entries")
+          let query = (supabase
+            .from("media_entries" as any) as any)
             .select("id")
             .eq("title", entry.title)
 
@@ -278,8 +278,8 @@ export default function ImportPage() {
 
           if (existing) {
             // Update existing entry
-            const { error: updateError } = await supabase
-              .from("media_entries")
+            const { error: updateError } = await (supabase
+              .from("media_entries" as any) as any)
               .update(entry)
               .eq("id", existing.id)
 
@@ -291,8 +291,8 @@ export default function ImportPage() {
             }
           } else {
             // Insert new entry
-            const { error: insertError } = await supabase
-              .from("media_entries")
+            const { error: insertError } = await (supabase
+              .from("media_entries" as any) as any)
               .insert(entry)
 
             if (insertError) {
@@ -317,7 +317,7 @@ export default function ImportPage() {
         toast.success(message)
         // Redirect to analytics after successful import
         setTimeout(() => {
-          router.push("/analytics")
+          router.push("/movies/analytics")
         }, 1500)
       }
       if (failedCount > 0) {
@@ -451,7 +451,7 @@ export default function ImportPage() {
       <header className="border-b">
         <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => router.push("/analytics")}>
+            <Button variant="ghost" size="icon" onClick={() => router.push("/movies/analytics")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-sm font-mono uppercase tracking-wider">Import Data</h1>

@@ -159,7 +159,7 @@ function EntriesPageContent() {
     // Only clean update the URL if something changed
     if (newQueryString !== currentQueryString) {
       isUpdatingFromState.current = true
-      const newUrl = newQueryString ? `/entries?${newQueryString}` : "/entries"
+      const newUrl = newQueryString ? `/movies?${newQueryString}` : "/movies"
       router.replace(newUrl, { scroll: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,7 +184,7 @@ function EntriesPageContent() {
 
       if (newQueryString !== currentQueryString) {
         isUpdatingFromState.current = true
-        const newUrl = newQueryString ? `/entries?${newQueryString}` : "/entries"
+        const newUrl = newQueryString ? `/movies?${newQueryString}` : "/movies"
         router.replace(newUrl, { scroll: false })
       }
     }, 300) // 300ms debounce
@@ -343,7 +343,7 @@ function EntriesPageContent() {
     // Preserve current URL with all filters and search params
     const currentUrl = window.location.pathname + window.location.search
     const returnTo = encodeURIComponent(currentUrl)
-    router.push(`/add?id=${entry.id}&returnTo=${returnTo}`)
+    router.push(`/movies/add?id=${entry.id}&returnTo=${returnTo}`)
   }
 
   const handleDelete = async (id: string) => {
@@ -487,12 +487,12 @@ function EntriesPageContent() {
           <>
             <div className="mb-6 space-y-4">
               {/* Search Bar and Column Picker */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[150px]">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Search by title, genre, platform, type, medium, language, status, or season..."
+                    placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value)
@@ -524,11 +524,12 @@ function EntriesPageContent() {
                   onClick={() => setShowSelectMode(!showSelectMode)}
                 >
                   <CheckSquare className="h-4 w-4" />
-                  {showSelectMode ? "Cancel Selection" : "Select"}
+                  <span className="hidden sm:inline">{showSelectMode ? "Cancel Selection" : "Select"}</span>
                 </Button>
+                {/* Column picker hidden on mobile since we use card view */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2">
+                    <Button variant="outline" size="sm" className="gap-2 hidden sm:flex">
                       <Columns className="h-4 w-4" />
                       Columns
                     </Button>
