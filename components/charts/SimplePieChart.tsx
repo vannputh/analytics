@@ -12,7 +12,7 @@ import {
 import { CHART_COLORS, tooltipStyle, emptyStateClass, formatNumber } from "./chart-config"
 
 interface SimplePieChartProps {
-    data: Record<string, number>
+    data: Record<string, number> | { name: string; value: number }[]
     title?: string
     height?: number
     innerRadius?: number
@@ -37,11 +37,19 @@ export function SimplePieChart({
     showPercentLabel = true,
 }: SimplePieChartProps) {
     const chartData = useMemo(() => {
-        return Object.entries(data)
-            .filter(([name]) => name && name !== "null" && name !== "undefined")
-            .sort((a, b) => b[1] - a[1])
+        let processedData: { name: string; value: number }[] = []
+
+        if (Array.isArray(data)) {
+            processedData = data
+        } else {
+            processedData = Object.entries(data)
+                .filter(([name]) => name && name !== "null" && name !== "undefined")
+                .map(([name, value]) => ({ name, value }))
+        }
+
+        return processedData
+            .sort((a, b) => b.value - a.value)
             .slice(0, limitItems)
-            .map(([name, value]) => ({ name, value }))
     }, [data, limitItems])
 
     if (chartData.length === 0) {

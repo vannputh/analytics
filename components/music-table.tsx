@@ -1,24 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import {
-    ColumnDef,
-    ColumnFiltersState,
-    SortingState,
-    VisibilityState,
-    flexRender,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
-    useReactTable,
-} from "@tanstack/react-table"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ColumnDef } from "@tanstack/react-table"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { MusicEntry } from "@/lib/database.types"
-import { ArrowUpDown, ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { ArrowUpDown, Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { SafeImage } from "@/components/ui/safe-image"
 import { Card, CardContent } from "@/components/ui/card"
 import { MusicDetailsDialog } from "@/components/music-details-dialog"
@@ -32,17 +19,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { deleteMusicEntry } from "@/lib/music-actions"
 import { toast } from "sonner"
+import { DataTable } from "@/components/ui/data-table"
 
 interface MusicTableProps {
     data: MusicEntry[]
 }
 
 export function MusicTable({ data }: MusicTableProps) {
-    const [sorting, setSorting] = useState<SortingState>([])
-    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-    const [globalFilter, setGlobalFilter] = useState("")
-
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [selectedMusic, setSelectedMusic] = useState<MusicEntry | null>(null)
 
@@ -212,211 +195,83 @@ export function MusicTable({ data }: MusicTableProps) {
         },
     ]
 
-    const table = useReactTable({
-        data,
-        columns,
-        onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
-        getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        onColumnVisibilityChange: setColumnVisibility,
-        onGlobalFilterChange: setGlobalFilter,
-        state: {
-            sorting,
-            columnFilters,
-            columnVisibility,
-            globalFilter,
-        },
-        initialState: {
-            pagination: {
-                pageSize: 20,
-            },
-        },
-    })
+    const renderMobileCard = (music: MusicEntry) => {
+        const statusVariants = {
+            "Finished": "default",
+            "Listening": "secondary",
+            "On Repeat": "secondary",
+            "Dropped": "destructive",
+            "Plan to Listen": "outline",
+        } as const
+
+        return (
+            <Card
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => handleEdit(music)}
+            >
+                <CardContent className="p-3">
+                    <div className="flex gap-3">
+                        {/* Album Art */}
+                        <div className="w-12 h-12 relative bg-muted rounded flex-shrink-0 overflow-hidden">
+                            {music.cover_url ? (
+                                <SafeImage
+                                    src={music.cover_url}
+                                    alt={music.title}
+                                    fill
+                                    className="object-cover"
+                                    fallbackElement={
+                                        <div className="flex items-center justify-center h-full">
+                                            <Eye className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                    }
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-full">
+                                    <Eye className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                            )}
+                        </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0 flex flex-col">
+                            <h3 className="font-medium text-sm leading-tight line-clamp-2">{music.title}</h3>
+                            {music.artist && (
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">{music.artist}</p>
+                            )}
+                            <div className="mt-1 flex items-center gap-1">
+                                {music.status && (
+                                    <Badge
+                                        variant={statusVariants[music.status as keyof typeof statusVariants] || "outline"}
+                                        className="text-[10px] px-1.5 py-0"
+                                    >
+                                        {music.status}
+                                    </Badge>
+                                )}
+                            </div>
+                            <div className="mt-auto pt-1 flex items-center justify-between">
+                                {music.my_rating ? (
+                                    <span className="text-xs font-medium">★ {music.my_rating}</span>
+                                ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                                {music.type && (
+                                    <span className="text-[10px] text-muted-foreground">{music.type}</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="relative flex-1 max-w-sm">
-                    <Input
-                        placeholder="Search music..."
-                        value={globalFilter ?? ""}
-                        onChange={(event) => setGlobalFilter(event.target.value)}
-                        className="max-w-sm"
-                    />
-                </div>
-            </div>
-
-            {/* Mobile Card View */}
-            <div className="grid grid-cols-2 gap-3 sm:hidden">
-                {table.getRowModel().rows.map((row) => {
-                    const music = row.original
-                    const statusVariants = {
-                        "Finished": "default",
-                        "Listening": "secondary",
-                        "On Repeat": "secondary",
-                        "Dropped": "destructive",
-                        "Plan to Listen": "outline",
-                    } as const
-                    return (
-                        <Card
-                            key={music.id}
-                            className="cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => handleEdit(music)}
-                        >
-                            <CardContent className="p-3">
-                                <div className="flex gap-3">
-                                    {/* Album Art */}
-                                    <div className="w-12 h-12 relative bg-muted rounded flex-shrink-0 overflow-hidden">
-                                        {music.cover_url ? (
-                                            <SafeImage
-                                                src={music.cover_url}
-                                                alt={music.title}
-                                                fill
-                                                className="object-cover"
-                                                fallbackElement={
-                                                    <div className="flex items-center justify-center h-full">
-                                                        <Eye className="h-4 w-4 text-muted-foreground" />
-                                                    </div>
-                                                }
-                                            />
-                                        ) : (
-                                            <div className="flex items-center justify-center h-full">
-                                                <Eye className="h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    {/* Info */}
-                                    <div className="flex-1 min-w-0 flex flex-col">
-                                        <h3 className="font-medium text-sm leading-tight line-clamp-2">{music.title}</h3>
-                                        {music.artist && (
-                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{music.artist}</p>
-                                        )}
-                                        <div className="mt-1 flex items-center gap-1">
-                                            {music.status && (
-                                                <Badge
-                                                    variant={statusVariants[music.status as keyof typeof statusVariants] || "outline"}
-                                                    className="text-[10px] px-1.5 py-0"
-                                                >
-                                                    {music.status}
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <div className="mt-auto pt-1 flex items-center justify-between">
-                                            {music.my_rating ? (
-                                                <span className="text-xs font-medium">★ {music.my_rating}</span>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
-                                            )}
-                                            {music.type && (
-                                                <span className="text-[10px] text-muted-foreground">{music.type}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )
-                })}
-                {table.getRowModel().rows.length === 0 && (
-                    <div className="col-span-2 text-center py-8 text-muted-foreground">
-                        No music entries found.
-                    </div>
-                )}
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="rounded-md border hidden sm:block">
-                <Table>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => {
-                                    return (
-                                        <TableHead key={header.id}>
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(
-                                                    header.column.columnDef.header,
-                                                    header.getContext()
-                                                )}
-                                        </TableHead>
-                                    )
-                                })}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows?.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow
-                                    key={row.id}
-                                    data-state={row.getIsSelected() && "selected"}
-                                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
-                                            {flexRender(
-                                                cell.column.columnDef.cell,
-                                                cell.getContext()
-                                            )}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={columns.length}
-                                    className="h-24 text-center"
-                                >
-                                    No music entries found.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
-
-            <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                    Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{" "}
-                    {Math.min(
-                        (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                        table.getFilteredRowModel().rows.length
-                    )}{" "}
-                    of {table.getFilteredRowModel().rows.length} entries
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.previousPage()}
-                        disabled={!table.getCanPreviousPage()}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                    </Button>
-                    <div className="flex items-center gap-1">
-                        <span className="text-sm">
-                            Page {table.getState().pagination.pageIndex + 1} of{" "}
-                            {table.getPageCount()}
-                        </span>
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => table.nextPage()}
-                        disabled={!table.getCanNextPage()}
-                    >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
+            <DataTable
+                columns={columns}
+                data={data}
+                searchPlaceholder="Search music..."
+                renderMobileCard={renderMobileCard}
+            />
 
             <MusicDetailsDialog
                 open={detailsOpen}
