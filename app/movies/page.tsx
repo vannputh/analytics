@@ -162,7 +162,6 @@ function EntriesPageContent() {
       const newUrl = newQueryString ? `/movies?${newQueryString}` : "/movies"
       router.replace(newUrl, { scroll: false })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, router])
 
   // Debounce URL updates for search query to prevent page refresh on every keystroke
@@ -195,7 +194,6 @@ function EntriesPageContent() {
         clearTimeout(searchTimeoutRef.current)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
 
   useEffect(() => {

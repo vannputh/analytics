@@ -17,6 +17,7 @@ import {
 import { BookDetailsDialog } from "@/components/book-details-dialog"
 import { MusicDetailsDialog } from "@/components/music-details-dialog"
 import { MediaDetailsDialog } from "@/components/media-details-dialog"
+import { FoodAddDialog } from "@/components/food-add-dialog"
 
 const WORKSPACES = {
   movies: { label: "Movies & TV", icon: Film, path: "/movies" },
@@ -37,6 +38,7 @@ export function PageHeader({ title }: PageHeaderProps) {
   const [showBookDialog, setShowBookDialog] = useState(false)
   const [showMusicDialog, setShowMusicDialog] = useState(false)
   const [showMediaDialog, setShowMediaDialog] = useState(false)
+  const [showFoodDialog, setShowFoodDialog] = useState(false)
 
   // Determine current workspace from URL
   const currentWorkspaceKey = (Object.keys(WORKSPACES).find(key =>
@@ -154,6 +156,18 @@ export function PageHeader({ title }: PageHeaderProps) {
             </Button>
           )}
 
+          {currentWorkspaceKey === "food" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFoodDialog(true)}
+              className="px-2 sm:px-3"
+            >
+              <Plus className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Add</span>
+            </Button>
+          )}
+
           <ThemeToggle />
           <Button
             variant="ghost"
@@ -193,6 +207,15 @@ export function PageHeader({ title }: PageHeaderProps) {
           setShowMusicDialog(false)
           router.refresh()
         }}
+      />
+      <FoodAddDialog
+        open={showFoodDialog}
+        onOpenChange={setShowFoodDialog}
+        onSuccess={() => {
+          setShowFoodDialog(false)
+          router.refresh()
+        }}
+        initialDate={new Date().toISOString()}
       />
     </header>
   )

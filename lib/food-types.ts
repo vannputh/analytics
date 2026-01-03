@@ -36,7 +36,6 @@ export const CUISINE_TYPES = [
     'BBQ',
     'Vegetarian',
     'Vegan',
-    'Cafe',
     'Bakery',
     'Street Food',
     'Fast Food',
@@ -94,6 +93,7 @@ export interface FoodFilterState {
     dateTo: string | null
     categories: string[]
     cuisineTypes: string[]
+    itemCategories: string[]
     priceLevels: string[]
     cities: string[]
     minRating: number | null
@@ -105,6 +105,7 @@ export const defaultFoodFilterState: FoodFilterState = {
     dateTo: null,
     categories: [],
     cuisineTypes: [],
+    itemCategories: [],
     priceLevels: [],
     cities: [],
     minRating: null,

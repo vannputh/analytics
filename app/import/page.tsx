@@ -86,7 +86,6 @@ export default function ImportPage() {
     if (pastedData.trim()) {
       debounceTimeoutRef.current = setTimeout(() => {
         parseAndCleanData(pastedData)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
       }, 1500)
     } else {
       setCleanedData([])

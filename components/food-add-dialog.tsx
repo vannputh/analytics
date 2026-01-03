@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useRef } from "react"
 import { FoodEntry, FoodEntryInsert, FoodEntryUpdate, ItemOrdered } from "@/lib/database.types"
-import { createFoodEntry, updateFoodEntry } from "@/lib/food-actions"
-import { CATEGORIES, PRICE_LEVELS, CUISINE_TYPES, FOOD_TAGS, formatDualCurrency, USD_TO_KHR_RATE } from "@/lib/food-types"
+import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
+import { PRICE_LEVELS, FOOD_TAGS, formatDualCurrency, USD_TO_KHR_RATE } from "@/lib/food-types"
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
-} from "@/components/ui/sheet"
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,13 +37,30 @@ import {
     Camera,
     Upload,
     ImageIcon,
+    Check,
+    ChevronsUpDown,
 } from "lucide-react"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { format } from "date-fns"
+import { format, isValid } from "date-fns"
 import Image from "next/image"
+import {
+    Carousel,
+    CarouselContent,
+    CarouselItem,
+    CarouselPrevious,
+    CarouselNext,
+} from "@/components/ui/carousel"
 
 interface FoodAddDialogProps {
     entry?: FoodEntry | null
@@ -62,28 +79,63 @@ function RatingInput({
     value: number | null
     onChange: (value: number | null) => void
 }) {
+    // Handle click to set rating - left half of star = full star, right half = half star
+    const handleStarClick = (starIndex: number, e: React.MouseEvent<HTMLButtonElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        const clickX = e.clientX - rect.left
+        const isRightHalf = clickX > rect.width / 2
+
+        const newValue = isRightHalf ? starIndex + 0.5 : starIndex + 1
+
+        // If clicking the same value, toggle it off
+        if (value === newValue) {
+            onChange(null)
+        } else {
+            onChange(newValue)
+        }
+    }
+
+    // Determine star fill for each star position
+    const getStarFill = (starIndex: number): 'full' | 'half' | 'empty' => {
+        if (value === null) return 'empty'
+        if (value >= starIndex + 1) return 'full'
+        if (value >= starIndex + 0.5) return 'half'
+        return 'empty'
+    }
+
     return (
         <div className="flex items-center justify-between">
             <Label className="text-sm">{label}</Label>
-            <div className="flex items-center gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                    <button
-                        key={i}
-                        type="button"
-                        onClick={() => onChange(value === i + 1 ? null : i + 1)}
-                        className="p-0.5"
-                    >
-                        <Star
-                            className={cn(
-                                "h-5 w-5 transition-colors",
-                                value !== null && i < value
-                                    ? "fill-amber-400 text-amber-400"
-                                    : "text-muted-foreground/30 hover:text-amber-400/50"
+            <div className="flex items-center gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => {
+                    const fill = getStarFill(i)
+                    return (
+                        <button
+                            key={i}
+                            type="button"
+                            onClick={(e) => handleStarClick(i, e)}
+                            className="p-0.5 relative"
+                        >
+                            {/* Background empty star */}
+                            <Star className="h-5 w-5 text-muted-foreground/30" />
+                            {/* Filled overlay */}
+                            {fill !== 'empty' && (
+                                <div
+                                    className="absolute inset-0 overflow-hidden p-0.5"
+                                    style={{ width: fill === 'half' ? '50%' : '100%' }}
+                                >
+                                    <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                                </div>
                             )}
-                        />
-                    </button>
-                ))}
-                {value && (
+                        </button>
+                    )
+                })}
+                {value !== null && (
+                    <span className="ml-1 text-xs font-mono text-muted-foreground">
+                        {value}
+                    </span>
+                )}
+                {value !== null && (
                     <button
                         type="button"
                         onClick={() => onChange(null)}
@@ -160,32 +212,19 @@ function MultiSelect({
 function PlaceImageUpload({
     images,
     onImagesChange,
+    onFileSelect,
 }: {
-    images: { file?: File; preview: string }[]
-    onImagesChange: (images: { file?: File; preview: string }[]) => void
+    images: { file?: File; preview: string; is_primary: boolean }[]
+    onImagesChange: (images: { file?: File; preview: string; is_primary: boolean }[]) => void
+    onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>
 }) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const cameraInputRef = useRef<HTMLInputElement>(null)
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files
-        if (!files) return
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        await onFileSelect(e)
 
-        const newImages: { file: File; preview: string }[] = []
-        Array.from(files).forEach((file) => {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error(`${file.name} is too large (max 5MB)`)
-                return
-            }
-            const reader = new FileReader()
-            reader.onloadend = () => {
-                newImages.push({ file, preview: reader.result as string })
-                if (newImages.length === files.length) {
-                    onImagesChange([...images, ...newImages])
-                }
-            }
-            reader.readAsDataURL(file)
-        })
+
 
         // Reset inputs
         if (fileInputRef.current) fileInputRef.current.value = ''
@@ -196,30 +235,62 @@ function PlaceImageUpload({
         onImagesChange(images.filter((_, i) => i !== index))
     }
 
+    const togglePrimary = (index: number) => {
+        const newImages = images.map((img, i) => ({
+            ...img,
+            is_primary: i === index ? !img.is_primary : false
+        }))
+        onImagesChange(newImages)
+    }
+
     return (
         <div className="space-y-3">
             <Label className="text-sm">Place Photos</Label>
 
             {/* Image previews */}
             {images.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 pb-2">
                     {images.map((img, index) => (
-                        <div key={index} className="relative flex-shrink-0">
-                            <div className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                        <div key={index} className="relative aspect-square group">
+                            <div className={cn(
+                                "relative w-full h-full rounded-lg overflow-hidden border transition-all",
+                                img.is_primary ? "border-primary ring-2 ring-primary/20" : "hover:border-primary/50"
+                            )}>
                                 <Image
                                     src={img.preview}
                                     alt={`Place photo ${index + 1}`}
                                     fill
                                     className="object-cover"
                                 />
+                                {img.is_primary && (
+                                    <div className="absolute top-1 left-1 bg-primary text-primary-foreground text-[8px] font-bold px-1 py-0.5 rounded uppercase">
+                                        Primary
+                                    </div>
+                                )}
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => removeImage(index)}
-                                className="absolute -top-1 -right-1 p-1 bg-destructive text-destructive-foreground rounded-full"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
+
+                            {/* Overlay Controls */}
+                            <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-lg">
+                                <button
+                                    type="button"
+                                    onClick={() => togglePrimary(index)}
+                                    className={cn(
+                                        "p-1.5 rounded-full transition-colors",
+                                        img.is_primary ? "bg-primary text-white" : "bg-white/20 text-white hover:bg-white/40"
+                                    )}
+                                    title={img.is_primary ? "Unset primary" : "Set as primary"}
+                                >
+                                    <Star className={cn("h-3 w-3", img.is_primary && "fill-current")} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => removeImage(index)}
+                                    className="p-1.5 bg-destructive/80 text-white rounded-full hover:bg-destructive"
+                                    title="Remove photo"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -267,20 +338,25 @@ function PlaceImageUpload({
     )
 }
 
-// Updated ItemsInput for ItemOrdered[] with prices and photo uploads
+// Updated ItemsInput for ItemOrdered[] with prices, categories, and photo uploads
 function ItemsOrderedInput({
     value,
     onChange,
     favoriteItem,
     onFavoriteChange,
+    availableCategories,
 }: {
     value: (ItemOrdered & { file?: File; preview?: string })[]
     onChange: (value: (ItemOrdered & { file?: File; preview?: string })[]) => void
     favoriteItem: string | null
     onFavoriteChange: (value: string | null) => void
+    availableCategories: string[]
 }) {
     const [newItemName, setNewItemName] = useState("")
     const [newItemPrice, setNewItemPrice] = useState("")
+    const [newItemCategory, setNewItemCategory] = useState("")
+    const [showCustomCategory, setShowCustomCategory] = useState(false)
+    const [categoryInputs, setCategoryInputs] = useState<Record<number, string>>({})
     const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
 
     const addItem = () => {
@@ -289,10 +365,13 @@ function ItemsOrderedInput({
                 name: newItemName.trim(),
                 price: newItemPrice ? parseFloat(newItemPrice) : null,
                 image_url: null,
+                category: newItemCategory.trim() || null,
             }
             onChange([...value, newItem])
             setNewItemName("")
             setNewItemPrice("")
+            setNewItemCategory("")
+            setShowCustomCategory(false)
         }
     }
 
@@ -308,6 +387,14 @@ function ItemsOrderedInput({
         const updated = [...value]
         updated[index] = { ...updated[index], price: price ? parseFloat(price) : null }
         onChange(updated)
+    }
+
+    const updateItemCategory = (index: number, category: string) => {
+        const updated = [...value]
+        updated[index] = { ...updated[index], category: category.trim() || null }
+        onChange(updated)
+        // Clear the custom input for this item
+        setCategoryInputs(prev => ({ ...prev, [index]: '' }))
     }
 
     const handleItemImage = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -351,30 +438,71 @@ function ItemsOrderedInput({
             <Label className="text-sm">Items Ordered</Label>
 
             {/* Add new item */}
-            <div className="flex gap-2">
-                <Input
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="Item name..."
-                    className="flex-1"
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            e.preventDefault()
-                            addItem()
-                        }
-                    }}
-                />
-                <Input
-                    value={newItemPrice}
-                    onChange={(e) => setNewItemPrice(e.target.value)}
-                    placeholder="$0"
-                    type="number"
-                    step="0.01"
-                    className="w-20"
-                />
-                <Button type="button" variant="outline" size="icon" onClick={addItem}>
-                    <Plus className="h-4 w-4" />
-                </Button>
+            <div className="flex flex-col gap-2">
+                <div className="flex gap-2 items-center">
+                    <Input
+                        value={newItemName}
+                        onChange={(e) => setNewItemName(e.target.value)}
+                        placeholder="Item name..."
+                        className="flex-1 h-9"
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                e.preventDefault()
+                                addItem()
+                            }
+                        }}
+                    />
+                    {showCustomCategory ? (
+                        <Input
+                            id="new-category-input"
+                            value={newItemCategory}
+                            onChange={(e) => setNewItemCategory(e.target.value)}
+                            placeholder="New category..."
+                            className="w-32 h-9 text-sm"
+                            autoFocus
+                            onBlur={() => {
+                                if (!newItemCategory.trim()) {
+                                    setShowCustomCategory(false)
+                                }
+                            }}
+                        />
+                    ) : (
+                        <Select
+                            value={newItemCategory}
+                            onValueChange={(val) => {
+                                if (val === "__other__") {
+                                    setNewItemCategory("")
+                                    setShowCustomCategory(true)
+                                } else {
+                                    setNewItemCategory(val)
+                                }
+                            }}
+                        >
+                            <SelectTrigger className="w-32 h-9 text-sm">
+                                <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableCategories.map((cat) => (
+                                    <SelectItem key={cat} value={cat}>
+                                        {cat}
+                                    </SelectItem>
+                                ))}
+                                <SelectItem value="__other__">Other...</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
+                    <Input
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value)}
+                        placeholder="$0"
+                        type="number"
+                        step="0.01"
+                        className="w-20 h-9"
+                    />
+                    <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={addItem}>
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
             {/* Items list */}
@@ -441,9 +569,12 @@ function ItemsOrderedInput({
                                     />
                                 </div>
 
-                                {/* Item name */}
+                                {/* Item name and category */}
                                 <div className="flex-1 min-w-0">
                                     <span className="text-sm font-medium truncate block">{item.name}</span>
+                                    {item.category && (
+                                        <span className="text-xs text-muted-foreground">{item.category}</span>
+                                    )}
                                 </div>
 
                                 {/* Price input */}
@@ -496,6 +627,90 @@ function ItemsOrderedInput({
     )
 }
 
+function CuisineSelector({
+    value,
+    onChange,
+    options
+}: {
+    value: string[]
+    onChange: (value: string[]) => void
+    options: string[]
+}) {
+    const [open, setOpen] = useState(false)
+    const [inputValue, setInputValue] = useState("")
+
+    const handleSelect = (currentValue: string) => {
+        if (value.includes(currentValue)) {
+            onChange(value.filter((v) => v !== currentValue))
+        } else {
+            onChange([...value, currentValue])
+        }
+    }
+
+    const handleCreate = () => {
+        if (inputValue.trim() && !value.includes(inputValue.trim())) {
+            onChange([...value, inputValue.trim()])
+            setInputValue("")
+        }
+    }
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between"
+                >
+                    {value.length > 0
+                        ? `${value.length} selected`
+                        : "Select cuisine..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+                <Command>
+                    <CommandInput placeholder="Search cuisine..." value={inputValue} onValueChange={setInputValue} />
+                    <CommandList>
+                        <CommandEmpty>
+                            <div className="p-2 text-sm text-center text-muted-foreground">
+                                No cuisine found.
+                                {inputValue && (
+                                    <button
+                                        type="button"
+                                        onClick={handleCreate}
+                                        className="mt-2 block w-full rounded bg-primary px-2 py-1 text-primary-foreground hover:bg-primary/90"
+                                    >
+                                        Create "{inputValue}"
+                                    </button>
+                                )}
+                            </div>
+                        </CommandEmpty>
+                        <CommandGroup>
+                            {options.map((option) => (
+                                <CommandItem
+                                    key={option}
+                                    value={option}
+                                    onSelect={() => handleSelect(option)}
+                                >
+                                    <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4",
+                                            value.includes(option) ? "opacity-100" : "opacity-0"
+                                        )}
+                                    />
+                                    {option}
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
 export function FoodAddDialog({
     entry,
     open,
@@ -508,7 +723,13 @@ export function FoodAddDialog({
 
     // Form state
     const [name, setName] = useState("")
-    const [visitDate, setVisitDate] = useState<Date | undefined>(undefined)
+    const [visitDate, setVisitDate] = useState<Date | undefined>(
+        entry?.visit_date
+            ? new Date(entry.visit_date)
+            : initialDate
+                ? new Date(initialDate)
+                : undefined
+    )
     const [category, setCategory] = useState<string>("")
     const [address, setAddress] = useState("")
     const [googleMapsUrl, setGoogleMapsUrl] = useState("")
@@ -529,7 +750,64 @@ export function FoodAddDialog({
     const [totalPrice, setTotalPrice] = useState<string>("")
     const [priceLevel, setPriceLevel] = useState<string>("")
     const [notes, setNotes] = useState("")
-    const [placeImages, setPlaceImages] = useState<{ file?: File; preview: string }[]>([])
+    const [placeImages, setPlaceImages] = useState<{ file?: File; preview: string; is_primary: boolean }[]>([])
+    const sidebarFileInputRef = useRef<HTMLInputElement>(null)
+
+    const handlePlaceFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files
+        if (!files || files.length === 0) return
+
+        const validFiles: File[] = []
+        Array.from(files).forEach((file) => {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error(`${file.name} is too large (max 5MB)`)
+            } else {
+                validFiles.push(file)
+            }
+        })
+
+        if (validFiles.length === 0) return
+
+        const readPromises = validFiles.map((file, idx) => {
+            return new Promise<{ file: File; preview: string; is_primary: boolean }>((resolve) => {
+                const reader = new FileReader()
+                reader.onloadend = () => {
+                    resolve({
+                        file,
+                        preview: reader.result as string,
+                        is_primary: placeImages.length === 0 && idx === 0
+                    })
+                }
+                reader.readAsDataURL(file)
+            })
+        })
+
+        const newImages = await Promise.all(readPromises)
+        setPlaceImages(prev => [...prev, ...newImages])
+
+        if (sidebarFileInputRef.current) sidebarFileInputRef.current.value = ''
+    }
+
+    const [isAutofilling, setIsAutofilling] = useState(false)
+    const [availableCuisines, setAvailableCuisines] = useState<string[]>([])
+    const [availableItemCategories, setAvailableItemCategories] = useState<string[]>([])
+
+    // Load available cuisines and item categories
+    useEffect(() => {
+        async function loadOptions() {
+            const [cuisineResult, categoryResult] = await Promise.all([
+                getUniqueCuisineTypes(),
+                getUniqueItemCategories()
+            ])
+            if (cuisineResult.success) {
+                setAvailableCuisines(cuisineResult.data)
+            }
+            if (categoryResult.success) {
+                setAvailableItemCategories(categoryResult.data)
+            }
+        }
+        loadOptions()
+    }, [])
 
     // Calculate total from items for display
     const itemsTotal = itemsOrdered.reduce((sum, item) => sum + (item.price || 0), 0)
@@ -566,11 +844,14 @@ export function FoodAddDialog({
             setTotalPrice(entry.total_price?.toString() || "")
             setPriceLevel(entry.price_level || "")
             setNotes(entry.notes || "")
-            setPlaceImages([]) // TODO: Load existing place images
+            setPlaceImages(entry.images?.map(img => ({
+                preview: img.image_url,
+                is_primary: img.is_primary
+            })) || [])
         } else {
             // Reset for new entry
             setName("")
-            setVisitDate(initialDate ? new Date(initialDate + "T00:00:00") : new Date())
+            setVisitDate(initialDate ? new Date(initialDate) : new Date())
             setCategory("")
             setAddress("")
             setGoogleMapsUrl("")
@@ -618,12 +899,13 @@ export function FoodAddDialog({
             const itemsForDb: ItemOrdered[] = itemsOrdered.map(item => ({
                 name: item.name,
                 price: item.price,
-                image_url: item.image_url || item.preview || null // Use preview URL for now
+                image_url: item.image_url || item.preview || null,
+                category: item.category || null
             }))
 
             const data: FoodEntryInsert | FoodEntryUpdate = {
                 name: name.trim(),
-                visit_date: format(visitDate, "yyyy-MM-dd"),
+                visit_date: visitDate && isValid(visitDate) ? format(visitDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
                 category: category || null,
                 address: address || null,
                 google_maps_url: googleMapsUrl || null,
@@ -655,8 +937,58 @@ export function FoodAddDialog({
             }
 
             if (result.success) {
-                // TODO: Upload place images to storage after entry is created
-                // TODO: Upload item images to storage after entry is created
+                const entryId = result.data.id
+
+                // Upload place images
+                if (placeImages.length > 0) {
+                    for (const img of placeImages) {
+                        if (img.file) {
+                            const uploadResult = await uploadFoodImage(img.file, entryId, 'place')
+                            if (uploadResult.success) {
+                                await addFoodEntryImage({
+                                    food_entry_id: entryId,
+                                    image_url: uploadResult.data.url,
+                                    storage_path: uploadResult.data.path,
+                                    is_primary: img.is_primary
+                                } as any)
+                            }
+                        }
+                    }
+                }
+
+                // Upload item images and update items
+                if (itemsOrdered.length > 0) {
+                    const updatedItems = [...itemsOrdered]
+                    let hasNewItemImages = false
+
+                    for (let i = 0; i < updatedItems.length; i++) {
+                        const item = updatedItems[i]
+                        if (item.file) {
+                            const uploadResult = await uploadFoodImage(item.file, entryId, 'item', i)
+                            if (uploadResult.success) {
+                                updatedItems[i] = {
+                                    ...item,
+                                    image_url: uploadResult.data.url,
+                                    file: undefined, // Clear file to avoid re-upload logic if we were to re-submit (though we close dialog)
+                                    preview: undefined
+                                }
+                                hasNewItemImages = true
+                            }
+                        }
+                    }
+
+                    if (hasNewItemImages) {
+                        // Update the entry with new item image URLs
+                        const itemsForDb: ItemOrdered[] = updatedItems.map(item => ({
+                            name: item.name,
+                            price: item.price,
+                            image_url: item.image_url || null,
+                            category: item.category || null
+                        }))
+
+                        await updateFoodEntry(entryId, { items_ordered: itemsForDb })
+                    }
+                }
 
                 toast.success(isEditing ? "Entry updated" : "Entry added")
                 onSuccess(result.data)
@@ -672,285 +1004,468 @@ export function FoodAddDialog({
         }
     }
 
+    const handleAutofill = async () => {
+        if (!googleMapsUrl) {
+            toast.error("Please enter a Google Maps URL first")
+            return
+        }
+
+        setIsAutofilling(true)
+        try {
+            const response = await fetch("/api/maps/place-details", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: googleMapsUrl }),
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to fetch place details")
+            }
+
+            if (data.name) setName(data.name)
+            if (data.address) setAddress(data.address)
+            if (data.website) setWebsiteUrl(data.website)
+            if (data.neighborhood) setNeighborhood(data.neighborhood)
+            if (data.city) setCity(data.city)
+            if (data.country) setCountry(data.country)
+            if (data.rating) setOverallRating(data.rating)
+            if (data.priceLevel) setPriceLevel(data.priceLevel)
+
+            // Add photos from Google Places to placeImages
+            if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+                const newImages = data.photos.map((photoUrl: string, index: number) => ({
+                    preview: photoUrl,
+                    is_primary: index === 0 // First photo is primary
+                }))
+                setPlaceImages(prev => [...prev, ...newImages])
+            }
+
+            toast.success("Autofilled from Google Maps")
+        } catch (error) {
+            console.error(error)
+            toast.error(error instanceof Error ? error.message : "Failed to autofill")
+        } finally {
+            setIsAutofilling(false)
+        }
+    }
+    const [activeTab, setActiveTab] = useState("general")
+    const tabs = ["general", "location", "items", "ratings", "notes"] as const
+
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="h-[95vh] rounded-t-xl p-0">
-                <ScrollArea className="h-full">
-                    <form onSubmit={handleSubmit} className="p-6 pb-8 space-y-6">
-                        <SheetHeader className="text-left">
-                            <SheetTitle>{isEditing ? "Edit Entry" : "Add Entry"}</SheetTitle>
-                            <SheetDescription>
-                                {isEditing ? "Update your dining experience" : "Record a new dining experience"}
-                            </SheetDescription>
-                        </SheetHeader>
-
-                        {/* Place Photos */}
-                        <PlaceImageUpload
-                            images={placeImages}
-                            onImagesChange={setPlaceImages}
-                        />
-
-                        <Separator />
-
-                        {/* Basic Info */}
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Restaurant / Place Name *</Label>
-                                <Input
-                                    id="name"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="e.g., Sushi Masato"
-                                    required
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
+                {/* Mobile Header */}
+                <div className="md:hidden border-b bg-muted/30 p-3">
+                    <div className="flex items-center gap-3">
+                        {/* Small Photo */}
+                        <div className="w-12 h-12 relative rounded overflow-hidden border shadow-sm bg-muted flex-shrink-0 group">
+                            {placeImages.length > 0 ? (
+                                <Image
+                                    src={placeImages.find(img => img.is_primary)?.preview || placeImages[0]?.preview}
+                                    alt={name || "New Entry"}
+                                    fill
+                                    className="object-cover"
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Visit Date *</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                className={cn(
-                                                    "w-full justify-start text-left font-normal",
-                                                    !visitDate && "text-muted-foreground"
-                                                )}
-                                            >
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {visitDate ? format(visitDate, "PPP") : "Pick a date"}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                            <Calendar
-                                                mode="single"
-                                                selected={visitDate}
-                                                onSelect={setVisitDate}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
+                            ) : (
+                                <div className="flex h-full items-center justify-center text-lg text-muted-foreground">
+                                    <Utensils className="h-5 w-5" />
                                 </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="category">Category</Label>
-                                    <Select value={category} onValueChange={setCategory}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {CATEGORIES.map((cat) => (
-                                                <SelectItem key={cat} value={cat}>
-                                                    {cat}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
+                            )}
                         </div>
-
-                        <Separator />
-
-                        {/* Location */}
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                <MapPin className="h-4 w-4" />
-                                Location
-                            </h4>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="neighborhood">Neighborhood</Label>
-                                    <Input
-                                        id="neighborhood"
-                                        value={neighborhood}
-                                        onChange={(e) => setNeighborhood(e.target.value)}
-                                        placeholder="e.g., BKK1"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="city">City</Label>
-                                    <Input
-                                        id="city"
-                                        value={city}
-                                        onChange={(e) => setCity(e.target.value)}
-                                        placeholder="e.g., Phnom Penh"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="address">Full Address</Label>
-                                <Textarea
-                                    id="address"
-                                    value={address}
-                                    onChange={(e) => setAddress(e.target.value)}
-                                    placeholder="Full address..."
-                                    rows={2}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="googleMapsUrl">Google Maps URL</Label>
-                                <Input
-                                    id="googleMapsUrl"
-                                    value={googleMapsUrl}
-                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                                    placeholder="https://maps.google.com/..."
-                                    type="url"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="instagramHandle">Instagram</Label>
-                                    <Input
-                                        id="instagramHandle"
-                                        value={instagramHandle}
-                                        onChange={(e) => setInstagramHandle(e.target.value)}
-                                        placeholder="@restaurant"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="websiteUrl">Website</Label>
-                                    <Input
-                                        id="websiteUrl"
-                                        value={websiteUrl}
-                                        onChange={(e) => setWebsiteUrl(e.target.value)}
-                                        placeholder="https://..."
-                                        type="url"
-                                    />
-                                </div>
-                            </div>
+                        {/* Title */}
+                        <div className="flex-1 min-w-0">
+                            <DialogTitle className="font-semibold text-base truncate h-auto leading-none">
+                                {isEditing ? name || "Edit Entry" : "Add New Entry"}
+                            </DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground truncate">
+                                {visitDate && isValid(visitDate) ? format(visitDate, "PPP") : "Add details for your food review"}
+                            </DialogDescription>
                         </div>
-
-                        <Separator />
-
-                        {/* Categories */}
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                <Utensils className="h-4 w-4" />
-                                Categories
-                            </h4>
-
-                            <MultiSelect
-                                label="Cuisine Type"
-                                options={CUISINE_TYPES}
-                                value={cuisineTypes}
-                                onChange={setCuisineTypes}
-                                placeholder="Select cuisines..."
-                            />
-
-                            <MultiSelect
-                                label="Tags"
-                                options={FOOD_TAGS}
-                                value={tags}
-                                onChange={setTags}
-                                placeholder="Select tags..."
-                            />
-                        </div>
-
-                        <Separator />
-
-                        {/* Items Ordered with prices and photos */}
-                        <ItemsOrderedInput
-                            value={itemsOrdered}
-                            onChange={setItemsOrdered}
-                            favoriteItem={favoriteItem}
-                            onFavoriteChange={setFavoriteItem}
-                        />
-
-                        <Separator />
-
-                        {/* Ratings */}
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                <Star className="h-4 w-4" />
-                                Ratings
-                            </h4>
-
-                            <div className="space-y-3">
-                                <RatingInput label="Overall" value={overallRating} onChange={setOverallRating} />
-                                <RatingInput label="Food" value={foodRating} onChange={setFoodRating} />
-                                <RatingInput label="Ambiance" value={ambianceRating} onChange={setAmbianceRating} />
-                                <RatingInput label="Service" value={serviceRating} onChange={setServiceRating} />
-                                <RatingInput label="Value" value={valueRating} onChange={setValueRating} />
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Price */}
-                        <div className="space-y-4">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                <DollarSign className="h-4 w-4" />
-                                Price
-                            </h4>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="totalPrice">Total (USD)</Label>
-                                    <div className="space-y-1">
-                                        <Input
-                                            id="totalPrice"
-                                            value={totalPrice}
-                                            onChange={(e) => setTotalPrice(e.target.value)}
-                                            placeholder={itemsTotal > 0 ? itemsTotal.toString() : "0"}
-                                            type="number"
-                                            step="0.01"
-                                        />
-                                        {displayTotal > 0 && (
-                                            <p className="text-xs text-muted-foreground font-mono">
-                                                = ៛{(displayTotal * USD_TO_KHR_RATE).toLocaleString()} KHR
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="priceLevel">Price Level</Label>
-                                    <Select value={priceLevel} onValueChange={setPriceLevel}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {PRICE_LEVELS.map((level) => (
-                                                <SelectItem key={level} value={level}>
-                                                    {level}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Notes */}
-                        <div className="space-y-2">
-                            <Label htmlFor="notes">Notes</Label>
-                            <Textarea
-                                id="notes"
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                placeholder="Any additional notes about your experience..."
-                                rows={4}
-                            />
-                        </div>
-
-                        {/* Submit */}
-                        <div className="flex gap-2 pt-4">
+                    </div>
+                    {/* Horizontal Tabs */}
+                    <div className="flex gap-1 mt-3 overflow-x-auto">
+                        {tabs.map(tab => (
                             <Button
-                                type="button"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => onOpenChange(false)}
+                                key={tab}
+                                variant={activeTab === tab ? "secondary" : "ghost"}
+                                size="sm"
+                                className={cn(
+                                    "h-8 text-xs flex-shrink-0 capitalize",
+                                    activeTab === tab && "bg-secondary font-medium"
+                                )}
+                                onClick={() => setActiveTab(tab)}
                             >
+                                {tab}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
+                    {/* Desktop Sidebar */}
+                    <div className="hidden md:flex w-64 bg-muted/30 border-r flex-col p-5 gap-5 overflow-y-auto shrink-0">
+                        {/* Photo Gallery Carousel */}
+                        {placeImages.length > 0 ? (
+                            <Carousel className="w-full" opts={{ loop: true }}>
+                                <CarouselContent>
+                                    {placeImages.map((img, index) => (
+                                        <CarouselItem key={index}>
+                                            <div className="aspect-[3/4] relative rounded-lg overflow-hidden border shadow-sm bg-muted w-full group">
+                                                <Image
+                                                    src={img.preview}
+                                                    alt={`Photo ${index + 1}`}
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                                {img.is_primary && (
+                                                    <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded uppercase">
+                                                        Primary
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CarouselItem>
+                                    ))}
+                                </CarouselContent>
+                                {placeImages.length > 1 && (
+                                    <>
+                                        <CarouselPrevious className="-left-3 h-7 w-7" />
+                                        <CarouselNext className="-right-3 h-7 w-7" />
+                                    </>
+                                )}
+                            </Carousel>
+                        ) : (
+                            <div className="aspect-[3/4] relative rounded-lg overflow-hidden border shadow-sm bg-muted self-center w-full group shrink-0">
+                                <div className="flex h-full items-center justify-center text-3xl text-muted-foreground">
+                                    <Utensils className="h-12 w-12" />
+                                </div>
+                                {/* Quick upload overlay */}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-white hover:text-white hover:bg-white/20"
+                                        onClick={() => sidebarFileInputRef.current?.click()}
+                                    >
+                                        <Upload className="h-4 w-4 mr-2" />
+                                        Add Photos
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Photo count */}
+                        {placeImages.length > 0 && (
+                            <p className="text-xs text-center text-muted-foreground">
+                                {placeImages.length} photo{placeImages.length !== 1 ? 's' : ''}
+                            </p>
+                        )}
+
+                        {/* Navigation Tabs (Vertical) */}
+                        <div className="flex flex-col gap-1 w-full flex-1">
+                            {tabs.map(tab => (
+                                <Button
+                                    key={tab}
+                                    variant={activeTab === tab ? "secondary" : "ghost"}
+                                    className={cn(
+                                        "justify-start h-9 truncate capitalize",
+                                        activeTab === tab && "bg-secondary font-medium"
+                                    )}
+                                    onClick={() => setActiveTab(tab)}
+                                >
+                                    {tab === "items" ? "Items Ordered" : tab === "ratings" ? "Ratings & Price" : tab}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Main Content Area */}
+                    <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden h-full">
+                        {/* Desktop Header */}
+                        <DialogHeader className="hidden md:block px-6 py-4 border-b shrink-0">
+                            <DialogTitle className="text-xl truncate" title={name || "New Entry"}>
+                                {isEditing ? "Edit Entry" : "Add New Entry"}
+                                {name && <span className="text-muted-foreground font-normal text-base ml-2">{name}</span>}
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        <ScrollArea className="flex-1">
+                            <form onSubmit={handleSubmit} className="p-4 md:p-6">
+                                {/* GENERAL TAB */}
+                                {activeTab === "general" && (
+                                    <div className="space-y-6">
+                                        {/* Place Photos */}
+                                        <PlaceImageUpload
+                                            images={placeImages}
+                                            onImagesChange={setPlaceImages}
+                                            onFileSelect={handlePlaceFileSelect}
+                                        />
+
+                                        <Separator />
+
+                                        {/* Basic Info */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2 col-span-full">
+                                                <Label htmlFor="name">Restaurant / Place Name <span className="text-red-500">*</span></Label>
+                                                <Input
+                                                    id="name"
+                                                    value={name}
+                                                    onChange={(e) => setName(e.target.value)}
+                                                    placeholder="e.g., Sushi Masato"
+                                                    required
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Cuisine Type</Label>
+                                                <CuisineSelector
+                                                    value={cuisineTypes}
+                                                    onChange={setCuisineTypes}
+                                                    options={[...new Set([...availableCuisines, ...cuisineTypes])].sort()}
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="category">Category</Label>
+                                                <Select value={category} onValueChange={setCategory}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Restaurant">Restaurant</SelectItem>
+                                                        <SelectItem value="Bar">Bar</SelectItem>
+                                                        <SelectItem value="Cafe">Cafe</SelectItem>
+                                                        <SelectItem value="Street Food">Street Food</SelectItem>
+                                                        <SelectItem value="Other">Other</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label>Visit Date <span className="text-red-500">*</span></Label>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            className={cn(
+                                                                "w-full justify-start text-left font-normal",
+                                                                !visitDate && "text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                                            {visitDate && isValid(visitDate) ? format(visitDate, "PPP") : "Pick a date"}
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-auto p-0" align="start">
+                                                        <Calendar
+                                                            mode="single"
+                                                            selected={visitDate}
+                                                            onSelect={setVisitDate}
+                                                            initialFocus
+                                                        />
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* LOCATION TAB */}
+                                {activeTab === "location" && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="googleMapsUrl">Google Maps URL</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    id="googleMapsUrl"
+                                                    value={googleMapsUrl}
+                                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                                                    placeholder="https://maps.google.com/..."
+                                                    type="url"
+                                                    className="flex-1"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={handleAutofill}
+                                                    disabled={isAutofilling || !googleMapsUrl}
+                                                >
+                                                    {isAutofilling ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        "Auto-fill"
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="neighborhood">Neighborhood</Label>
+                                                <Input
+                                                    id="neighborhood"
+                                                    value={neighborhood}
+                                                    onChange={(e) => setNeighborhood(e.target.value)}
+                                                    placeholder="e.g., BKK1"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="city">City</Label>
+                                                <Input
+                                                    id="city"
+                                                    value={city}
+                                                    onChange={(e) => setCity(e.target.value)}
+                                                    placeholder="e.g., Phnom Penh"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="address">Full Address</Label>
+                                            <Textarea
+                                                id="address"
+                                                value={address}
+                                                onChange={(e) => setAddress(e.target.value)}
+                                                placeholder="Full address..."
+                                                rows={2}
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="instagramHandle">Instagram</Label>
+                                                <Input
+                                                    id="instagramHandle"
+                                                    value={instagramHandle}
+                                                    onChange={(e) => setInstagramHandle(e.target.value)}
+                                                    placeholder="@restaurant"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="websiteUrl">Website</Label>
+                                                <Input
+                                                    id="websiteUrl"
+                                                    value={websiteUrl}
+                                                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                                                    placeholder="https://..."
+                                                    type="url"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ITEMS TAB */}
+                                {activeTab === "items" && (
+                                    <div className="space-y-4">
+                                        <ItemsOrderedInput
+                                            value={itemsOrdered}
+                                            onChange={setItemsOrdered}
+                                            favoriteItem={favoriteItem}
+                                            onFavoriteChange={setFavoriteItem}
+                                            availableCategories={availableItemCategories}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* RATINGS TAB */}
+                                {activeTab === "ratings" && (
+                                    <div className="space-y-6">
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                <Star className="h-4 w-4" />
+                                                Ratings
+                                            </h4>
+                                            <div className="space-y-3">
+                                                <RatingInput label="Overall" value={overallRating} onChange={setOverallRating} />
+                                                <RatingInput label="Food" value={foodRating} onChange={setFoodRating} />
+                                                <RatingInput label="Ambiance" value={ambianceRating} onChange={setAmbianceRating} />
+                                                <RatingInput label="Service" value={serviceRating} onChange={setServiceRating} />
+                                                <RatingInput label="Value" value={valueRating} onChange={setValueRating} />
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                <DollarSign className="h-4 w-4" />
+                                                Price
+                                            </h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="totalPrice">Total (USD)</Label>
+                                                    <div className="space-y-1">
+                                                        <Input
+                                                            id="totalPrice"
+                                                            value={totalPrice}
+                                                            onChange={(e) => setTotalPrice(e.target.value)}
+                                                            placeholder={itemsTotal > 0 ? itemsTotal.toString() : "0"}
+                                                            type="number"
+                                                            step="0.01"
+                                                        />
+                                                        {displayTotal > 0 && (
+                                                            <p className="text-xs text-muted-foreground font-mono">
+                                                                = ៛{(displayTotal * USD_TO_KHR_RATE).toLocaleString()} KHR
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="priceLevel">Price Level</Label>
+                                                    <Select value={priceLevel} onValueChange={setPriceLevel}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {PRICE_LEVELS.map((level) => (
+                                                                <SelectItem key={level} value={level}>
+                                                                    {level}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* NOTES TAB */}
+                                {activeTab === "notes" && (
+                                    <div className="space-y-4">
+                                        <MultiSelect
+                                            label="Tags"
+                                            options={FOOD_TAGS}
+                                            value={tags}
+                                            onChange={setTags}
+                                            placeholder="Select tags..."
+                                        />
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="notes">Notes</Label>
+                                            <Textarea
+                                                id="notes"
+                                                value={notes}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                placeholder="Any additional notes about your experience..."
+                                                rows={6}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </form>
+                        </ScrollArea>
+
+                        {/* Footer */}
+                        <div className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
+                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                                 Cancel
                             </Button>
-                            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                            <Button onClick={handleSubmit} disabled={isSubmitting}>
                                 {isSubmitting ? (
                                     <>
                                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -963,10 +1478,20 @@ export function FoodAddDialog({
                                 )}
                             </Button>
                         </div>
-                    </form>
-                </ScrollArea>
-            </SheetContent>
-        </Sheet>
+                    </div>
+                </div>
+
+                {/* Hidden file input for sidebar upload */}
+                <input
+                    ref={sidebarFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handlePlaceFileSelect}
+                />
+            </DialogContent>
+        </Dialog>
     )
 }
 

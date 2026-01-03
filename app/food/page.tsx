@@ -11,6 +11,8 @@ import { PageHeader } from "@/components/page-header"
 
 export default function FoodPage() {
     const [selectedEntry, setSelectedEntry] = useState<FoodEntry | null>(null)
+
+
     const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null)
     const [isAdding, setIsAdding] = useState(false)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)

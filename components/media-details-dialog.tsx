@@ -10,6 +10,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog";
 
@@ -556,10 +557,12 @@ export function MediaDetailsDialog({
                         </div>
                         {/* Title */}
                         <div className="flex-1 min-w-0">
-                            <h2 className="font-semibold text-base truncate">{isNewEntry ? "Add New Entry" : formData.title}</h2>
-                            {!isNewEntry && entry?.start_date && (
-                                <p className="text-sm text-muted-foreground">{format(parseISO(entry.start_date), "yyyy")}</p>
-                            )}
+                            <DialogTitle className="font-semibold text-base truncate h-auto leading-none">
+                                {isNewEntry ? "Add New Entry" : formData.title}
+                            </DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground mt-1">
+                                {!isNewEntry && entry?.start_date ? format(parseISO(entry.start_date), "yyyy") : (isNewEntry ? "Add a new media entry to your library" : "")}
+                            </DialogDescription>
                         </div>
                     </div>
                     {/* Horizontal Tabs */}
@@ -637,8 +640,10 @@ export function MediaDetailsDialog({
                         <DialogHeader className="hidden md:block px-6 py-4 border-b shrink-0">
                             <DialogTitle className="text-xl truncate" title={formData.title || "New Entry"}>
                                 {isNewEntry ? "Add New Entry" : formData.title}
-                                {!isNewEntry && <span className="text-muted-foreground font-normal text-base ml-2">({entry?.start_date ? format(parseISO(entry.start_date), "yyyy") : "Unknown Year"})</span>}
                             </DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground">
+                                {!isNewEntry && entry?.start_date ? `Released in ${format(parseISO(entry.start_date), "yyyy")}` : (isNewEntry ? "Enter the details for the new media entry" : "")}
+                            </DialogDescription>
                         </DialogHeader>
 
                         <ScrollArea className="flex-1">

@@ -24,14 +24,16 @@ interface FoodAnalyticsChartsProps {
     metrics: FoodMetrics
 }
 
-// Monochrome palette with accent
+// Monochrome palette with better spread for readability
 const CHART_COLORS = [
-    "hsl(0, 0%, 15%)",
+    "hsl(0, 0%, 15%)", // Very dark
     "hsl(0, 0%, 30%)",
     "hsl(0, 0%, 45%)",
     "hsl(0, 0%, 60%)",
     "hsl(0, 0%, 75%)",
-    "hsl(0, 0%, 85%)",
+    "hsl(0, 0%, 85%)", // Very light
+    "hsl(0, 0%, 40%)",
+    "hsl(0, 0%, 55%)",
 ]
 
 const ACCENT_COLOR = "hsl(0, 0%, 10%)"
@@ -42,8 +44,9 @@ const tooltipStyle = {
     border: "1px solid hsl(0, 0%, 90%)",
     borderRadius: "4px",
     padding: "8px 12px",
-    fontSize: "12px",
+    fontSize: "11px",
     fontFamily: "monospace",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
 }
 
 function formatMonthLabel(month: string): string {
@@ -53,7 +56,7 @@ function formatMonthLabel(month: string): string {
 }
 
 function formatCurrency(amount: number): string {
-    return `฿${amount.toLocaleString()}`
+    return `$${amount.toLocaleString()}`
 }
 
 function formatNumber(num: number): string {
@@ -79,21 +82,26 @@ function VisitsByMonthChart({ data }: { data: { month: string; count: number }[]
 
     return (
         <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" vertical={false} />
                 <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
                     axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    interval={0}
+                    angle={-45}
+                    textAnchor="end"
+                    height={50}
                 />
                 <YAxis
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
                     axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
                 />
                 <Tooltip
                     contentStyle={tooltipStyle}
+                    cursor={{ fill: "hsl(0, 0%, 96%)" }}
                     formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Visits"]}
                 />
                 <Bar dataKey="count" fill={ACCENT_COLOR} radius={[2, 2, 0, 0]} />
@@ -121,25 +129,29 @@ function SpendingByMonthChart({ data }: { data: { month: string; amount: number 
 
     return (
         <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
                 <defs>
                     <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={ACCENT_COLOR} stopOpacity={0.3} />
                         <stop offset="95%" stopColor={ACCENT_COLOR} stopOpacity={0} />
                     </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" vertical={false} />
                 <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
                     axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    interval={0}
+                    angle={-45}
+                    textAnchor="end"
+                    height={50}
                 />
                 <YAxis
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
                     axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-                    tickFormatter={(v) => `฿${v >= 1000 ? `${v / 1000}k` : v}`}
+                    tickFormatter={(v) => `$${v >= 1000 ? `${v / 1000}k` : v}`}
                 />
                 <Tooltip
                     contentStyle={tooltipStyle}
@@ -157,6 +169,15 @@ function SpendingByMonthChart({ data }: { data: { month: string; amount: number 
         </ResponsiveContainer>
     )
 }
+
+// Palette for Treemap (darker for white text visibility)
+const TREEMAP_COLORS = [
+    "hsl(0, 0%, 15%)",
+    "hsl(0, 0%, 25%)",
+    "hsl(0, 0%, 35%)",
+    "hsl(0, 0%, 45%)",
+    "hsl(0, 0%, 55%)",
+]
 
 // Cuisine Types Treemap
 function CuisineTreemap({ data }: { data: Record<string, number> }) {
@@ -184,7 +205,11 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
                 stroke="hsl(0, 0%, 100%)"
                 fill={ACCENT_COLOR}
                 content={({ x, y, width, height, name, value }) => {
-                    if (width < 40 || height < 30) return <g />
+                    if (width < 50 || height < 40) return <g />
+                    // Deterministic color based on name
+                    const colorIndex = Math.abs(name?.toString().split('').reduce((a, b) => a + b.charCodeAt(0), 0) || 0) % TREEMAP_COLORS.length
+                    const fill = TREEMAP_COLORS[colorIndex]
+
                     return (
                         <g>
                             <rect
@@ -192,7 +217,7 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
                                 y={y}
                                 width={width}
                                 height={height}
-                                fill={CHART_COLORS[Math.abs(name?.toString().charCodeAt(0) || 0) % CHART_COLORS.length]}
+                                fill={fill}
                                 stroke="hsl(0, 0%, 100%)"
                                 strokeWidth={2}
                             />
@@ -201,7 +226,7 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
                                 y={y + height / 2 - 6}
                                 textAnchor="middle"
                                 fill="hsl(0, 0%, 100%)"
-                                fontSize={11}
+                                fontSize={10}
                                 fontFamily="monospace"
                                 fontWeight="bold"
                             >
@@ -211,8 +236,8 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
                                 x={x + width / 2}
                                 y={y + height / 2 + 8}
                                 textAnchor="middle"
-                                fill="hsl(0, 0%, 85%)"
-                                fontSize={10}
+                                fill="hsl(0, 0%, 80%)"
+                                fontSize={9}
                                 fontFamily="monospace"
                             >
                                 {value}
@@ -234,6 +259,7 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
 function DistributionPieChart({ data, title }: { data: Record<string, number>; title: string }) {
     const chartData = useMemo(() => {
         return Object.entries(data)
+            .filter(([name]) => name && name !== "null" && name !== "undefined")
             .sort((a, b) => b[1] - a[1])
             .slice(0, 8)
             .map(([name, value]) => ({ name, value }))
@@ -248,31 +274,42 @@ function DistributionPieChart({ data, title }: { data: Record<string, number>; t
     }
 
     return (
-        <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
+        <ResponsiveContainer width="100%" height={320}>
+            <PieChart margin={{ top: 20, right: 20, bottom: 40, left: 20 }}>
                 <Pie
                     data={chartData}
                     cx="50%"
-                    cy="50%"
-                    innerRadius={50}
+                    cy="45%"
+                    innerRadius={60}
                     outerRadius={90}
-                    paddingAngle={2}
+                    paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }) =>
-                        `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-                    }
+                    label={({ percent }) => {
+                        const p = percent ?? 0
+                        if (p < 0.05) return ""
+                        return `${(p * 100).toFixed(0)}%`
+                    }}
                     labelLine={{ stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 }}
                 >
                     {chartData.map((_, index) => (
                         <Cell
                             key={`cell-${index}`}
                             fill={CHART_COLORS[index % CHART_COLORS.length]}
+                            stroke="hsl(0, 0%, 100%)"
+                            strokeWidth={1}
                         />
                     ))}
                 </Pie>
                 <Tooltip
                     contentStyle={tooltipStyle}
                     formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Visits"]}
+                />
+                <Legend
+                    verticalAlign="bottom"
+                    align="center"
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', paddingTop: '10px' }}
                 />
             </PieChart>
         </ResponsiveContainer>
@@ -291,22 +328,29 @@ function MostVisitedChart({ data }: { data: { name: string; count: number; avgRa
 
     return (
         <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data.slice(0, 8)} layout="vertical" margin={{ top: 10, right: 10, left: 80, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
+            <BarChart
+                data={data.slice(0, 8)}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+            >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" horizontal={false} />
                 <XAxis
                     type="number"
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
+                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
                 />
                 <YAxis
                     type="category"
                     dataKey="name"
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
+                    tick={{ fontSize: 9, fontFamily: "monospace" }}
                     tickLine={false}
-                    width={80}
+                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    width={100}
                 />
                 <Tooltip
                     contentStyle={tooltipStyle}
+                    cursor={{ fill: "hsl(0, 0%, 96%)" }}
                     formatter={(value: number | undefined, name: string | undefined) => {
                         const v = value ?? 0
                         if (name === "count") return [v, "Visits"]
@@ -418,11 +462,11 @@ export function FoodAnalyticsCharts({ metrics }: FoodAnalyticsChartsProps) {
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">
-                            By City
+                            By Food Type
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <DistributionPieChart data={metrics.countByCity} title="City" />
+                        <DistributionPieChart data={metrics.countByItemCategory} title="Food Type" />
                     </CardContent>
                 </Card>
 

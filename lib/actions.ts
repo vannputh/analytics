@@ -299,7 +299,7 @@ export async function getStats() {
         .gte('finish_date', yearStart)
         .lte('finish_date', yearEnd),
 
-      // Get only price and medium columns (much smaller than select *)
+      // Get only price and medium columns
       supabase
         .from('media_entries')
         .select('price, medium')

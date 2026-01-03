@@ -1,14 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { FoodEntry } from "@/lib/database.types"
-import { deleteFoodEntry } from "@/lib/food-actions"
+import { useState, useEffect } from "react"
+import { deleteFoodEntry, getFoodEntry } from "@/lib/food-actions"
+import { FoodEntry, FoodEntryImage } from "@/lib/database.types"
+import { FoodGallery } from "./food-gallery"
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -23,6 +26,7 @@ import {
     Utensils,
     Copy,
     Loader2,
+    ImageIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -41,7 +45,7 @@ function RatingDisplay({ label, rating }: { label: string; rating: number | null
     if (rating === null || rating === undefined) return null
 
     return (
-        <div className="flex items-center justify-between py-1">
+        <div className="flex items-center justify-between py-1.5">
             <span className="text-sm text-muted-foreground">{label}</span>
             <div className="flex items-center gap-1">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -71,6 +75,35 @@ export function FoodDetailsDialog({
     onDelete,
 }: FoodDetailsDialogProps) {
     const [isDeleting, setIsDeleting] = useState(false)
+    const [fullEntry, setFullEntry] = useState<(FoodEntry & { images: FoodEntryImage[] }) | null>(null)
+    const [isLoading, setIsLoading] = useState(false)
+    const [activeTab, setActiveTab] = useState<"overview" | "details" | "notes">("overview")
+
+    // Fetch full entry details (with images) when dialog opens
+    useEffect(() => {
+        async function fetchDetails() {
+            if (!entry?.id || !open) return
+
+            setIsLoading(true)
+            const result = await getFoodEntry(entry.id)
+            if (result.success) {
+                setFullEntry(result.data)
+            }
+            setIsLoading(false)
+        }
+
+        if (open && entry) {
+            fetchDetails()
+            setActiveTab("overview")
+        }
+    }, [entry?.id, open])
+
+    // Update fullEntry if entry prop changes (e.g. after edit)
+    useEffect(() => {
+        if (entry) {
+            setFullEntry(prev => prev?.id === entry.id ? { ...prev, ...entry } : null)
+        }
+    }, [entry])
 
     if (!entry) return null
 
@@ -106,14 +139,42 @@ export function FoodDetailsDialog({
         ? entry.items_ordered.reduce((sum, item) => sum + (item.price || 0), 0)
         : 0
 
+    const images = fullEntry?.images || []
+    const hasImages = images.length > 0 || entry.primary_image_url
+
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="h-[90vh] sm:h-[85vh] rounded-t-xl p-0">
-                <ScrollArea className="h-full">
-                    <div className="p-6 pb-8">
-                        <SheetHeader className="text-left">
-                            <SheetTitle className="text-xl">{entry.name}</SheetTitle>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
+                <ScrollArea className="flex-1">
+                    {/* Hero Photo Section - Full Width at Top */}
+                    <div className="relative">
+                        {hasImages ? (
+                            <div className="w-full">
+                                <FoodGallery
+                                    images={images.length > 0
+                                        ? images.map(img => ({ url: img.image_url, alt: entry.name }))
+                                        : [{ url: entry.primary_image_url!, alt: entry.name }]
+                                    }
+                                    className="rounded-none [&>div:first-child]:rounded-none [&>div:first-child]:aspect-[16/9] md:[&>div:first-child]:aspect-[21/9]"
+                                />
+                            </div>
+                        ) : (
+                            <div className="aspect-[16/9] md:aspect-[21/9] w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+                                <div className="text-center text-muted-foreground">
+                                    <ImageIcon className="h-16 w-16 mx-auto mb-3 opacity-30" />
+                                    <p className="text-sm">No photos available</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Header with Title */}
+                    <div className="px-6 py-4 border-b bg-background sticky top-0 z-10">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl md:text-2xl truncate" title={entry.name}>
+                                {entry.name}
+                            </DialogTitle>
+                            <DialogDescription className="flex flex-wrap items-center gap-2 mt-1">
                                 {entry.category && (
                                     <Badge variant="outline" className="text-xs">
                                         <Utensils className="h-3 w-3 mr-1" />
@@ -127,211 +188,244 @@ export function FoodDetailsDialog({
                                         year: "numeric",
                                     })}
                                 </span>
-                            </div>
-                        </SheetHeader>
+                            </DialogDescription>
+                        </DialogHeader>
 
-                        {/* Cuisine Types */}
-                        {entry.cuisine_type && Array.isArray(entry.cuisine_type) && entry.cuisine_type.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-4">
-                                {entry.cuisine_type.map((cuisine) => (
-                                    <Badge key={cuisine} variant="secondary">
-                                        {cuisine}
-                                    </Badge>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Tags */}
-                        {entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                                {entry.tags.map((tag) => (
-                                    <Badge key={tag} variant="outline" className="text-xs">
-                                        {tag}
-                                    </Badge>
-                                ))}
-                            </div>
-                        )}
-
-                        <Separator className="my-4" />
-
-                        {/* Location Section */}
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                                Location
-                            </h4>
-
-                            {(entry.neighborhood || entry.city) && (
-                                <div className="flex items-start gap-2">
-                                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                                    <p className="text-sm">
-                                        {[entry.neighborhood, entry.city, entry.country].filter(Boolean).join(", ")}
-                                    </p>
-                                </div>
-                            )}
-
-                            {entry.address && (
-                                <div className="flex items-start gap-2">
-                                    <div className="flex-1 text-sm text-muted-foreground">
-                                        {entry.address}
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyAddress}>
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            )}
-
-                            {/* External Links */}
-                            <div className="flex flex-wrap gap-2">
-                                {entry.google_maps_url && (
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a href={entry.google_maps_url} target="_blank" rel="noopener noreferrer">
-                                            <MapPin className="h-4 w-4 mr-2" />
-                                            Google Maps
-                                        </a>
-                                    </Button>
-                                )}
-                                {entry.instagram_handle && (
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a
-                                            href={`https://instagram.com/${entry.instagram_handle.replace("@", "")}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            <Instagram className="h-4 w-4 mr-2" />
-                                            {entry.instagram_handle}
-                                        </a>
-                                    </Button>
-                                )}
-                                {entry.website_url && (
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a href={entry.website_url} target="_blank" rel="noopener noreferrer">
-                                            <Globe className="h-4 w-4 mr-2" />
-                                            Website
-                                        </a>
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-
-                        <Separator className="my-4" />
-
-                        {/* Ratings Section */}
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                                Ratings
-                            </h4>
-                            <div className="space-y-1">
-                                <RatingDisplay label="Overall" rating={entry.overall_rating} />
-                                <RatingDisplay label="Food" rating={entry.food_rating} />
-                                <RatingDisplay label="Ambiance" rating={entry.ambiance_rating} />
-                                <RatingDisplay label="Service" rating={entry.service_rating} />
-                                <RatingDisplay label="Value" rating={entry.value_rating} />
-                            </div>
-                        </div>
-
-                        <Separator className="my-4" />
-
-                        {/* Price Section */}
-                        <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
-                            <div>
-                                <span className="text-sm text-muted-foreground">Total</span>
-                                <p className="text-lg font-semibold font-mono">
-                                    {formatDualCurrency(entry.total_price || itemsTotal)}
-                                </p>
-                            </div>
-                            {entry.price_level && (
-                                <div>
-                                    <span className="text-sm text-muted-foreground">Price Level</span>
-                                    <p className="text-lg font-semibold">{entry.price_level}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Items Ordered */}
-                        {entry.items_ordered && Array.isArray(entry.items_ordered) && entry.items_ordered.length > 0 && (
-                            <>
-                                <Separator className="my-4" />
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                                        Items Ordered
-                                    </h4>
-                                    <ul className="space-y-3">
-                                        {entry.items_ordered.map((item, i) => (
-                                            <li key={i} className="flex items-start gap-3">
-                                                {item.image_url && (
-                                                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                                                        <Image
-                                                            src={item.image_url}
-                                                            alt={item.name}
-                                                            fill
-                                                            className="object-cover"
-                                                        />
-                                                    </div>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <span className={cn(
-                                                            "text-sm truncate",
-                                                            item.name === entry.favorite_item && "font-medium text-amber-600"
-                                                        )}>
-                                                            {item.name}
-                                                            {item.name === entry.favorite_item && " ⭐"}
-                                                        </span>
-                                                        {item.price && (
-                                                            <span className="text-sm font-mono text-muted-foreground flex-shrink-0">
-                                                                {formatDualCurrency(item.price)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            </>
-                        )}
-
-                        {/* Notes */}
-                        {entry.notes && (
-                            <>
-                                <Separator className="my-4" />
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                                        Notes
-                                    </h4>
-                                    <p className="text-sm whitespace-pre-wrap">{entry.notes}</p>
-                                </div>
-                            </>
-                        )}
-
-                        {/* Actions */}
-                        <Separator className="my-4" />
-                        <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => onEdit(entry)}
-                            >
-                                <Edit2 className="h-4 w-4 mr-2" />
-                                Edit
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="text-destructive hover:text-destructive"
-                                onClick={handleDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                )}
-                            </Button>
+                        {/* Tabs */}
+                        <div className="flex gap-1 mt-4 overflow-x-auto">
+                            {(["overview", "details", "notes"] as const).map(tab => (
+                                <Button
+                                    key={tab}
+                                    variant={activeTab === tab ? "secondary" : "ghost"}
+                                    size="sm"
+                                    className={cn(
+                                        "h-8 text-sm flex-shrink-0 capitalize",
+                                        activeTab === tab && "bg-secondary font-medium"
+                                    )}
+                                    onClick={() => setActiveTab(tab)}
+                                >
+                                    {tab}
+                                </Button>
+                            ))}
                         </div>
                     </div>
+
+                    {/* Content Area */}
+                    <div className="p-4 md:p-6">
+                        {/* OVERVIEW TAB */}
+                        {activeTab === "overview" && (
+                            <div className="space-y-6">
+                                {/* Cuisine Types & Tags */}
+                                {(entry.cuisine_type?.length || entry.tags?.length) && (
+                                    <div className="space-y-3">
+                                        {/* Cuisine Types */}
+                                        {entry.cuisine_type && Array.isArray(entry.cuisine_type) && entry.cuisine_type.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {entry.cuisine_type.map((cuisine) => (
+                                                    <Badge key={cuisine} variant="secondary">
+                                                        {cuisine}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Tags */}
+                                        {entry.tags && Array.isArray(entry.tags) && entry.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1">
+                                                {entry.tags.map((tag) => (
+                                                    <Badge key={tag} variant="outline" className="text-xs">
+                                                        {tag}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Ratings Section */}
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                                        Ratings
+                                    </h4>
+                                    <div className="space-y-0.5 bg-muted/30 rounded-lg p-4">
+                                        <RatingDisplay label="Overall" rating={entry.overall_rating} />
+                                        <RatingDisplay label="Food" rating={entry.food_rating} />
+                                        <RatingDisplay label="Ambiance" rating={entry.ambiance_rating} />
+                                        <RatingDisplay label="Service" rating={entry.service_rating} />
+                                        <RatingDisplay label="Value" rating={entry.value_rating} />
+                                    </div>
+                                </div>
+
+                                {/* Price Section */}
+                                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                                    <div>
+                                        <span className="text-sm text-muted-foreground">Total</span>
+                                        <p className="text-lg font-semibold font-mono">
+                                            {formatDualCurrency(entry.total_price || itemsTotal)}
+                                        </p>
+                                    </div>
+                                    {entry.price_level && (
+                                        <div>
+                                            <span className="text-sm text-muted-foreground">Price Level</span>
+                                            <p className="text-lg font-semibold">{entry.price_level}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* DETAILS TAB */}
+                        {activeTab === "details" && (
+                            <div className="space-y-6">
+                                {/* Location Section */}
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                                        Location
+                                    </h4>
+
+                                    {(entry.neighborhood || entry.city) && (
+                                        <div className="flex items-start gap-2">
+                                            <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                                            <p className="text-sm">
+                                                {[entry.neighborhood, entry.city, entry.country].filter(Boolean).join(", ")}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {entry.address && (
+                                        <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg">
+                                            <div className="flex-1 text-sm text-muted-foreground">
+                                                {entry.address}
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyAddress}>
+                                                <Copy className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* External Links */}
+                                    <div className="flex flex-wrap gap-2">
+                                        {entry.google_maps_url && (
+                                            <Button variant="outline" size="sm" asChild>
+                                                <a href={entry.google_maps_url} target="_blank" rel="noopener noreferrer">
+                                                    <MapPin className="h-4 w-4 mr-2" />
+                                                    Google Maps
+                                                </a>
+                                            </Button>
+                                        )}
+                                        {entry.instagram_handle && (
+                                            <Button variant="outline" size="sm" asChild>
+                                                <a
+                                                    href={`https://instagram.com/${entry.instagram_handle.replace("@", "")}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    <Instagram className="h-4 w-4 mr-2" />
+                                                    {entry.instagram_handle}
+                                                </a>
+                                            </Button>
+                                        )}
+                                        {entry.website_url && (
+                                            <Button variant="outline" size="sm" asChild>
+                                                <a href={entry.website_url} target="_blank" rel="noopener noreferrer">
+                                                    <Globe className="h-4 w-4 mr-2" />
+                                                    Website
+                                                </a>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Items Ordered */}
+                                {entry.items_ordered && Array.isArray(entry.items_ordered) && entry.items_ordered.length > 0 && (
+                                    <>
+                                        <Separator />
+                                        <div className="space-y-3">
+                                            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                                                Items Ordered
+                                            </h4>
+                                            <ul className="space-y-3">
+                                                {entry.items_ordered.map((item, i) => (
+                                                    <li key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                                                        {item.image_url && (
+                                                            <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border">
+                                                                <Image
+                                                                    src={item.image_url}
+                                                                    alt={item.name}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span className={cn(
+                                                                    "text-sm truncate",
+                                                                    item.name === entry.favorite_item && "font-medium text-amber-600"
+                                                                )}>
+                                                                    {item.name}
+                                                                    {item.name === entry.favorite_item && " ⭐"}
+                                                                </span>
+                                                                {item.price && (
+                                                                    <span className="text-sm font-mono text-muted-foreground flex-shrink-0">
+                                                                        {formatDualCurrency(item.price)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* NOTES TAB */}
+                        {activeTab === "notes" && (
+                            <div className="space-y-4">
+                                <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                                    Notes
+                                </h4>
+                                {entry.notes ? (
+                                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                                        <p className="whitespace-pre-wrap">{entry.notes}</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground italic">No notes added yet.</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </ScrollArea>
-            </SheetContent>
-        </Sheet>
+
+                {/* Footer */}
+                <DialogFooter className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
+                        onClick={handleDelete}
+                        disabled={isDeleting}
+                    >
+                        {isDeleting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Trash2 className="mr-2 h-4 w-4" />
+                        )}
+                        Delete
+                    </Button>
+                    <Button
+                        variant="default"
+                        onClick={() => onEdit(entry)}
+                    >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
 

@@ -14,6 +14,7 @@ export interface FoodMetrics {
     averagePrice: number
     spentByMonth: { month: string; amount: number }[]
     spentByCuisine: Record<string, number>
+    spentByItemCategory: Record<string, number>
 
     // Ratings
     averageRating: number
@@ -31,12 +32,14 @@ export interface FoodMetrics {
     countByCategory: Record<string, number>
     countByPriceLevel: Record<string, number>
     countByTag: Record<string, number>
+    countByItemCategory: Record<string, number>
 
     // Top entries
     topCuisine: string | null
     topCity: string | null
     topNeighborhood: string | null
     topCategory: string | null
+    topItemCategory: string | null
 
     // Most visited
     mostVisitedPlaces: { name: string; count: number; avgRating: number }[]
@@ -81,6 +84,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
 
         const spentByMonthMap: Record<string, number> = {}
         const spentByCuisine: Record<string, number> = {}
+        const spentByItemCategory: Record<string, number> = {}
         const countByMonthMap: Record<string, number> = {}
         const countByCuisine: Record<string, number> = {}
         const countByCity: Record<string, number> = {}
@@ -88,6 +92,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
         const countByCategory: Record<string, number> = {}
         const countByPriceLevel: Record<string, number> = {}
         const countByTag: Record<string, number> = {}
+        const countByItemCategory: Record<string, number> = {}
         const ratingBuckets: Record<number, number> = {}
 
         // Track visits by place name
@@ -131,6 +136,15 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
                         incrementRecord(spentByCuisine, c.trim(), perCuisinePrice)
                     }
                 }
+
+                // Spending by item category
+                if (entry.items_ordered && Array.isArray(entry.items_ordered)) {
+                    for (const item of entry.items_ordered) {
+                        if (item.category && item.price) {
+                            incrementRecord(spentByItemCategory, item.category, item.price)
+                        }
+                    }
+                }
             }
 
             // Counts
@@ -154,6 +168,15 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             if (entry.tags && Array.isArray(entry.tags)) {
                 for (const t of entry.tags) {
                     incrementRecord(countByTag, t.trim())
+                }
+            }
+
+            // Item categories (from items_ordered)
+            if (entry.items_ordered && Array.isArray(entry.items_ordered)) {
+                for (const item of entry.items_ordered) {
+                    if (item.category) {
+                        incrementRecord(countByItemCategory, item.category)
+                    }
                 }
             }
 
@@ -231,6 +254,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             averagePrice,
             spentByMonth,
             spentByCuisine,
+            spentByItemCategory,
 
             // Ratings
             averageRating,
@@ -248,12 +272,14 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             countByCategory,
             countByPriceLevel,
             countByTag,
+            countByItemCategory,
 
             // Top entries
             topCuisine: getTopEntry(countByCuisine),
             topCity: getTopEntry(countByCity),
             topNeighborhood: getTopEntry(countByNeighborhood),
             topCategory: getTopEntry(countByCategory),
+            topItemCategory: getTopEntry(countByItemCategory),
 
             // Most visited
             mostVisitedPlaces,

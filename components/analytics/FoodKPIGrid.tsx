@@ -47,12 +47,12 @@ function KPICard({ label, value, subValue, icon, className }: KPICardProps) {
 
 function formatCurrency(amount: number): string {
     if (amount >= 1000000) {
-        return `฿${(amount / 1000000).toFixed(1)}M`
+        return `$${(amount / 1000000).toFixed(1)}M`
     }
     if (amount >= 1000) {
-        return `฿${(amount / 1000).toFixed(1)}K`
+        return `$${(amount / 1000).toFixed(1)}K`
     }
-    return `฿${amount.toLocaleString()}`
+    return `$${amount.toLocaleString()}`
 }
 
 function formatNumber(num: number, decimals = 0): string {
@@ -95,14 +95,14 @@ export function FoodKPIGrid({ metrics }: FoodKPIGridProps) {
                 icon={<TrendingUp className="h-8 w-8" />}
             />
             <KPICard
-                label="Top City"
-                value={metrics.topCity || "—"}
+                label="Top Food Type"
+                value={metrics.topItemCategory || "—"}
                 subValue={
-                    metrics.topCity && metrics.countByCity[metrics.topCity]
-                        ? `${metrics.countByCity[metrics.topCity]} visits`
+                    metrics.topItemCategory && metrics.countByItemCategory[metrics.topItemCategory]
+                        ? `${metrics.countByItemCategory[metrics.topItemCategory]} visits`
                         : undefined
                 }
-                icon={<MapPin className="h-8 w-8" />}
+                icon={<Utensils className="h-8 w-8" />}
             />
             <KPICard
                 label="Would Return"

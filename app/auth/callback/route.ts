@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = await createClient()
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    
+
     if (!error && data.user) {
       // Additional safety check: verify user was created before signups were disabled
       // This prevents any edge cases where a user might have been created
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
         // Verify the user exists in the system
         const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(data.user.id)
-        
+
         if (userError || !userData.user) {
           // User doesn't exist or error occurred, sign them out
           await supabase.auth.signOut()

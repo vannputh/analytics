@@ -8,53 +8,96 @@ export type ActionResponse<T> =
     | { success: true; data: T }
     | { success: false; error: string }
 
-// Get all food entries with optional filters
-export async function getFoodEntries(filters?: {
-    dateFrom?: string
-    dateTo?: string
-    category?: string
-    cuisineType?: string
+export interface FoodFilters {
+    dateFrom?: string | null
+    dateTo?: string | null
+    category?: string // Keep for backward compatibility if needed
+    categories?: string[]
+    cuisineType?: string // Keep for backward compatibility
+    cuisineTypes?: string[]
+    itemCategories?: string[]
+    priceLevels?: string[]
     city?: string
-    minRating?: number
+    minRating?: number | null
+    wouldReturn?: boolean | null
     search?: string
     limit?: number
     offset?: number
-}): Promise<ActionResponse<FoodEntry[]> & { count?: number | null }> {
+    includeImages?: boolean
+}
+
+// Helper to apply filters to a Supabase query
+function applyFoodFilters(query: any, filters?: FoodFilters) {
+    if (!filters) return query
+
+    let q = query
+
+    if (filters.dateFrom) {
+        q = q.gte('visit_date', filters.dateFrom)
+    }
+
+    if (filters.dateTo) {
+        q = q.lte('visit_date', filters.dateTo)
+    }
+
+    if (filters.categories && filters.categories.length > 0) {
+        q = q.in('category', filters.categories)
+    } else if (filters.category) {
+        q = q.eq('category', filters.category)
+    }
+
+    if (filters.cuisineTypes && filters.cuisineTypes.length > 0) {
+        q = q.overlaps('cuisine_type', filters.cuisineTypes)
+    } else if (filters.cuisineType) {
+        q = q.contains('cuisine_type', [filters.cuisineType])
+    }
+
+    if (filters.priceLevels && filters.priceLevels.length > 0) {
+        q = q.in('price_level', filters.priceLevels)
+    }
+
+    if (filters.wouldReturn !== undefined && filters.wouldReturn !== null) {
+        q = q.eq('would_return', filters.wouldReturn)
+    }
+
+    if (filters.city) {
+        q = q.eq('city', filters.city)
+    }
+
+    if (filters.minRating) {
+        q = q.gte('overall_rating', filters.minRating)
+    }
+
+    if (filters.search) {
+        q = q.ilike('name', `%${filters.search}%`)
+    }
+
+    return q
+}
+
+// Get all food entries with optional filters
+export async function getFoodEntries(filters?: FoodFilters): Promise<ActionResponse<FoodEntry[]> & { count?: number | null }> {
     try {
         const supabase = await createClient()
 
+        let selectQuery = '*'
+        if (filters?.includeImages) {
+            selectQuery = `
+                *,
+                food_entry_images (
+                    image_url,
+                    is_primary
+                )
+            `
+        }
+
         let query = (supabase
             .from('food_entries' as any) as any)
-            .select('*')
+            .select(selectQuery)
             .order('visit_date', { ascending: false })
 
-        if (filters?.dateFrom) {
-            query = query.gte('visit_date', filters.dateFrom)
-        }
+        query = applyFoodFilters(query, filters)
 
-        if (filters?.dateTo) {
-            query = query.lte('visit_date', filters.dateTo)
-        }
-
-        if (filters?.category) {
-            query = query.eq('category', filters.category)
-        }
-
-        if (filters?.cuisineType) {
-            query = query.contains('cuisine_type', [filters.cuisineType])
-        }
-
-        if (filters?.city) {
-            query = query.eq('city', filters.city)
-        }
-
-        if (filters?.minRating) {
-            query = query.gte('overall_rating', filters.minRating)
-        }
-
-        if (filters?.search) {
-            query = query.ilike('name', `%${filters.search}%`)
-        }
 
         // Add pagination if specified
         if (filters?.limit !== undefined && filters?.offset !== undefined) {
@@ -70,9 +113,21 @@ export async function getFoodEntries(filters?: {
             return { success: false, error: error.message }
         }
 
+        const entries = (data || []).map((entry: any) => {
+            if (filters?.includeImages) {
+                const primaryImage = entry.food_entry_images?.find((img: any) => img.is_primary) || entry.food_entry_images?.[0]
+                const { food_entry_images, ...rest } = entry
+                return {
+                    ...rest,
+                    primary_image_url: primaryImage?.image_url
+                }
+            }
+            return entry
+        })
+
         return {
             success: true,
-            data: (data || []) as FoodEntry[]
+            data: entries as FoodEntry[]
         }
     } catch (error) {
         console.error('Unexpected error:', error)
@@ -88,36 +143,35 @@ export async function getFoodEntry(id: string): Promise<ActionResponse<FoodEntry
     try {
         const supabase = await createClient()
 
-        // Get entry
-        const { data: entry, error: entryError } = await (supabase
+        // Get entry with images in a single query
+        const { data: entry, error } = await (supabase
             .from('food_entries' as any) as any)
-            .select('*')
+            .select(`
+                *,
+                food_entry_images (
+                    *
+                )
+            `)
             .eq('id', id)
             .single()
 
-        if (entryError) {
-            console.error('Error fetching food entry:', entryError)
-            return { success: false, error: entryError.message }
+        if (error) {
+            console.error('Error fetching food entry:', error)
+            return { success: false, error: error.message }
         }
 
-        // Get images
-        const { data: images, error: imagesError } = await (supabase
-            .from('food_entry_images' as any) as any)
-            .select('*')
-            .eq('food_entry_id', id)
-            .order('is_primary', { ascending: false })
-            .order('created_at', { ascending: true })
-
-        if (imagesError) {
-            console.error('Error fetching food entry images:', imagesError)
-            return { success: false, error: imagesError.message }
-        }
+        const { food_entry_images, ...rest } = entry as any
+        const sortedImages = (food_entry_images || []).sort((a: any, b: any) => {
+            if (a.is_primary && !b.is_primary) return -1
+            if (!a.is_primary && b.is_primary) return 1
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        })
 
         return {
             success: true,
             data: {
-                ...(entry as FoodEntry),
-                images: (images || []) as FoodEntryImage[]
+                ...rest,
+                images: sortedImages as FoodEntryImage[]
             }
         }
     } catch (error) {
@@ -391,7 +445,7 @@ export async function setFoodEntryPrimaryImage(imageId: string, entryId: string)
 }
 
 // Get food stats for analytics
-export async function getFoodStats(): Promise<ActionResponse<{
+export async function getFoodStats(filters?: FoodFilters): Promise<ActionResponse<{
     totalVisits: number
     totalSpent: number
     averageRating: number
@@ -402,9 +456,13 @@ export async function getFoodStats(): Promise<ActionResponse<{
     try {
         const supabase = await createClient()
 
-        const { data: entries, error } = await (supabase
+        let query = (supabase
             .from('food_entries' as any) as any)
-            .select('name, price_per_person, overall_rating, cuisine_type, city')
+            .select('name, total_price, overall_rating, cuisine_type, city')
+
+        query = applyFoodFilters(query, filters)
+
+        const { data: entries, error } = await query
 
         if (error) {
             console.error('Error fetching food stats:', error)
@@ -464,7 +522,7 @@ export async function getFoodStats(): Promise<ActionResponse<{
 }
 
 // Get entries grouped by date for calendar view
-export async function getFoodEntriesByMonth(year: number, month: number): Promise<ActionResponse<Record<string, FoodEntry[]>>> {
+export async function getFoodEntriesByMonth(year: number, month: number, includeImages = false): Promise<ActionResponse<Record<string, FoodEntry[]>>> {
     try {
         const supabase = await createClient()
 
@@ -474,9 +532,20 @@ export async function getFoodEntriesByMonth(year: number, month: number): Promis
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, '0')}-01`
 
+        let selectQuery = '*'
+        if (includeImages) {
+            selectQuery = `
+                *,
+                food_entry_images (
+                    image_url,
+                    is_primary
+                )
+            `
+        }
+
         const { data, error } = await (supabase
             .from('food_entries' as any) as any)
-            .select('*')
+            .select(selectQuery)
             .gte('visit_date', startDate)
             .lt('visit_date', endDate)
             .order('visit_date', { ascending: true })
@@ -488,12 +557,23 @@ export async function getFoodEntriesByMonth(year: number, month: number): Promis
 
         // Group by date
         const grouped: Record<string, FoodEntry[]> = {}
-        for (const entry of (data || []) as FoodEntry[]) {
+        for (const entry of (data || []) as any[]) {
             const date = entry.visit_date
             if (!grouped[date]) {
                 grouped[date] = []
             }
-            grouped[date].push(entry)
+
+            let processedEntry = entry
+            if (includeImages) {
+                const primaryImage = entry.food_entry_images?.find((img: any) => img.is_primary) || entry.food_entry_images?.[0]
+                const { food_entry_images, ...rest } = entry
+                processedEntry = {
+                    ...rest,
+                    primary_image_url: primaryImage?.image_url
+                }
+            }
+
+            grouped[date].push(processedEntry as FoodEntry)
         }
 
         return { success: true, data: grouped }
@@ -524,6 +604,128 @@ export async function getFoodEntryPrimaryImage(entryId: string): Promise<ActionR
         }
 
         return { success: true, data: data as FoodEntryImage | null }
+    } catch (error) {
+        console.error('Unexpected error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+// Get unique cuisine types for the dropdown
+export async function getUniqueCuisineTypes(): Promise<ActionResponse<string[]>> {
+    try {
+        const supabase = await createClient()
+
+        // Just select the column we need
+        const { data, error } = await (supabase
+            .from('food_entries' as any) as any)
+            .select('cuisine_type')
+
+        if (error) {
+            console.error('Error fetching cuisine types:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Extract unique cuisine types
+        const allCuisines = (data || [])
+            .flatMap((entry: any) => entry.cuisine_type || [])
+            .filter(Boolean) as string[]
+
+        // Filter out "Cafe" as per user request (it should be a Category)
+        const uniqueCuisines = Array.from(new Set(allCuisines))
+            .filter(c => c !== 'Cafe')
+            .sort()
+
+        return { success: true, data: uniqueCuisines }
+    } catch (error) {
+        console.error('Unexpected error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+// Get unique item categories for the dropdown (e.g., matcha, malatang, etc.)
+export async function getUniqueItemCategories(): Promise<ActionResponse<string[]>> {
+    try {
+        const supabase = await createClient()
+
+        // Just select the column we need
+        const { data, error } = await (supabase
+            .from('food_entries' as any) as any)
+            .select('items_ordered')
+
+        if (error) {
+            console.error('Error fetching item categories:', error)
+            return { success: false, error: error.message }
+        }
+
+        // Extract unique categories from all items_ordered arrays
+        const allCategories = (data || [])
+            .flatMap((entry: any) => entry.items_ordered || [])
+            .map((item: any) => item.category)
+            .filter(Boolean) as string[]
+
+        const uniqueCategories = Array.from(new Set(allCategories)).sort() as string[]
+
+        return { success: true, data: uniqueCategories }
+    } catch (error) {
+        console.error('Unexpected error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+// Get unique cities for the dropdown
+export async function getUniqueCities(): Promise<ActionResponse<string[]>> {
+    try {
+        const supabase = await createClient()
+
+        const { data, error } = await (supabase
+            .from('food_entries' as any) as any)
+            .select('city')
+
+        if (error) {
+            console.error('Error fetching unique cities:', error)
+            return { success: false, error: error.message }
+        }
+
+        const uniqueCities = Array.from(new Set((data || []).map((e: any) => e.city).filter(Boolean)))
+            .sort() as string[]
+
+        return { success: true, data: uniqueCities }
+    } catch (error) {
+        console.error('Unexpected error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
+// Get unique categories for the dropdown
+export async function getUniqueCategories(): Promise<ActionResponse<string[]>> {
+    try {
+        const supabase = await createClient()
+
+        const { data, error } = await (supabase
+            .from('food_entries' as any) as any)
+            .select('category')
+
+        if (error) {
+            console.error('Error fetching unique categories:', error)
+            return { success: false, error: error.message }
+        }
+
+        const uniqueCategories = Array.from(new Set((data || []).map((e: any) => e.category).filter(Boolean)))
+            .sort() as string[]
+
+        return { success: true, data: uniqueCategories }
     } catch (error) {
         console.error('Unexpected error:', error)
         return {

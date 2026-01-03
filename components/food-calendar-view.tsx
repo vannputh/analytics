@@ -50,7 +50,7 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
         async function fetchEntries() {
             setLoading(true)
             try {
-                const result = await getFoodEntriesByMonth(currentYear, currentMonth + 1)
+                const result = await getFoodEntriesByMonth(currentYear, currentMonth + 1, true)
                 if (isMounted && result.success) {
                     setEntriesByDate(result.data)
                 }
@@ -154,14 +154,11 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                     </Button>
                 </div>
 
+                <div className="flex-1" />
+
                 <h2 className="text-lg font-semibold font-mono">
                     {formatMonthYear(currentYear, currentMonth)}
                 </h2>
-
-                <Button onClick={onAddEntry} size="sm" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    <span className="hidden sm:inline">Add Entry</span>
-                </Button>
             </div>
 
             {/* Calendar Grid */}
@@ -282,15 +279,42 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                 </div>
             )}
 
-            {/* Summary for month when no date selected */}
+            {/* All month entries when no date selected */}
             {!selectedDate && !loading && (
-                <div className="text-center py-4 text-sm text-muted-foreground">
-                    <p>
-                        {Object.values(entriesByDate).reduce((sum, arr) => sum + arr.length, 0)} entries this month
-                    </p>
-                    <p className="text-xs mt-1">
-                        Tap on a day to see details
-                    </p>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium font-mono">
+                            All Entries for {formatMonthYear(currentYear, currentMonth)}
+                        </h3>
+                        <span className="text-xs text-muted-foreground">
+                            {Object.values(entriesByDate).reduce((sum, arr) => sum + arr.length, 0)} entries
+                        </span>
+                    </div>
+
+                    {Object.values(entriesByDate).flat().length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border border-dashed rounded-lg">
+                            <Utensils className="h-8 w-8 opacity-30 mb-2" />
+                            <p className="text-sm mb-3">No entries this month</p>
+                            <Button variant="outline" size="sm" onClick={onAddEntry}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Entry
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {Object.entries(entriesByDate)
+                                .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
+                                .flatMap(([_, entries]) => entries)
+                                .map((entry) => (
+                                    <FoodEntryCard
+                                        key={entry.id}
+                                        entry={entry}
+                                        onClick={() => onViewEntry(entry)}
+                                        onEdit={() => onEditEntry(entry)}
+                                    />
+                                ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>
