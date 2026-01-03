@@ -1,20 +1,8 @@
 "use client"
 
-import { useMemo } from "react"
-import {
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-} from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatNumber, formatDuration } from "@/lib/parsing-utils"
+import { formatNumber } from "@/lib/parsing-utils"
+import { SimpleBarChart, SimplePieChart } from "@/components/charts"
 
 interface MusicMetrics {
     totalEntries: number
@@ -29,105 +17,6 @@ interface MusicMetrics {
 
 interface MusicAnalyticsChartsProps {
     metrics: MusicMetrics
-}
-
-const CHART_COLORS = [
-    "hsl(0, 0%, 15%)",
-    "hsl(0, 0%, 30%)",
-    "hsl(0, 0%, 45%)",
-    "hsl(0, 0%, 60%)",
-    "hsl(0, 0%, 75%)",
-    "hsl(0, 0%, 85%)",
-]
-
-const ACCENT_COLOR = "hsl(0, 0%, 10%)"
-
-const tooltipStyle = {
-    backgroundColor: "hsl(0, 0%, 98%)",
-    border: "1px solid hsl(0, 0%, 90%)",
-    borderRadius: "4px",
-    padding: "8px 12px",
-    fontSize: "12px",
-    fontFamily: "monospace",
-}
-
-function SimpleBarChart({ data, dataKey }: { data: any[]; dataKey: string }) {
-    if (data.length === 0) return <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">No data</div>
-
-    return (
-        <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data} layout="vertical" margin={{ top: 10, right: 30, left: 30, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(0, 0%, 90%)" />
-                <XAxis
-                    type="number"
-                    tick={{ fontSize: 10, fontFamily: "monospace" }}
-                    tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-                    hide
-                />
-                <YAxis
-                    dataKey="name"
-                    type="category"
-                    tick={{ fontSize: 11, fontFamily: "monospace" }}
-                    tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-                    width={100}
-                />
-                <Tooltip
-                    cursor={{ fill: "hsl(0, 0%, 96%)" }}
-                    contentStyle={tooltipStyle}
-                />
-                <Bar dataKey={dataKey} fill={ACCENT_COLOR} radius={[0, 2, 2, 0]} barSize={20} />
-            </BarChart>
-        </ResponsiveContainer>
-    )
-}
-
-function SimplePieChart({ data, title }: { data: Record<string, number>; title: string }) {
-    const chartData = useMemo(() => {
-        return Object.entries(data)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, value]) => ({ name, value }))
-    }, [data])
-
-    if (chartData.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No {title.toLowerCase()} data
-            </div>
-        )
-    }
-
-    return (
-        <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-                <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) =>
-                        `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-                    }
-                    labelLine={{ stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 }}
-                >
-                    {chartData.map((_, index) => (
-                        <Cell
-                            key={`cell-${index}`}
-                            fill={CHART_COLORS[index % CHART_COLORS.length]}
-                        />
-                    ))}
-                </Pie>
-                <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
-                />
-            </PieChart>
-        </ResponsiveContainer>
-    )
 }
 
 export function MusicAnalyticsCharts({ metrics }: MusicAnalyticsChartsProps) {
@@ -172,7 +61,11 @@ export function MusicAnalyticsCharts({ metrics }: MusicAnalyticsChartsProps) {
                         <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">Top Artists</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <SimpleBarChart data={metrics.topArtists} dataKey="value" />
+                        <SimpleBarChart
+                            data={metrics.topArtists}
+                            layout="vertical"
+                            valueLabel="Count"
+                        />
                     </CardContent>
                 </Card>
             </div>
@@ -183,7 +76,7 @@ export function MusicAnalyticsCharts({ metrics }: MusicAnalyticsChartsProps) {
                         <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">By Type</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <SimplePieChart data={metrics.countByType} title="Type" />
+                        <SimplePieChart data={metrics.countByType} title="Type" valueLabel="Items" />
                     </CardContent>
                 </Card>
                 <Card>
@@ -191,7 +84,7 @@ export function MusicAnalyticsCharts({ metrics }: MusicAnalyticsChartsProps) {
                         <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">By Platform</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <SimplePieChart data={metrics.countByPlatform} title="Platform" />
+                        <SimplePieChart data={metrics.countByPlatform} title="Platform" valueLabel="Items" />
                     </CardContent>
                 </Card>
                 <Card>
@@ -199,7 +92,7 @@ export function MusicAnalyticsCharts({ metrics }: MusicAnalyticsChartsProps) {
                         <CardTitle className="text-sm font-mono uppercase tracking-wider text-muted-foreground">By Genre</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <SimplePieChart data={metrics.countByGenre} title="Genre" />
+                        <SimplePieChart data={metrics.countByGenre} title="Genre" valueLabel="Items" />
                     </CardContent>
                 </Card>
             </div>

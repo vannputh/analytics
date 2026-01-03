@@ -61,6 +61,7 @@ import {
     CarouselPrevious,
     CarouselNext,
 } from "@/components/ui/carousel"
+import { RatingInput, CuisineSelector } from "@/components/form-inputs"
 
 interface FoodAddDialogProps {
     entry?: FoodEntry | null
@@ -70,84 +71,7 @@ interface FoodAddDialogProps {
     initialDate?: string
 }
 
-function RatingInput({
-    label,
-    value,
-    onChange
-}: {
-    label: string
-    value: number | null
-    onChange: (value: number | null) => void
-}) {
-    // Handle click to set rating - left half of star = full star, right half = half star
-    const handleStarClick = (starIndex: number, e: React.MouseEvent<HTMLButtonElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        const clickX = e.clientX - rect.left
-        const isRightHalf = clickX > rect.width / 2
 
-        const newValue = isRightHalf ? starIndex + 0.5 : starIndex + 1
-
-        // If clicking the same value, toggle it off
-        if (value === newValue) {
-            onChange(null)
-        } else {
-            onChange(newValue)
-        }
-    }
-
-    // Determine star fill for each star position
-    const getStarFill = (starIndex: number): 'full' | 'half' | 'empty' => {
-        if (value === null) return 'empty'
-        if (value >= starIndex + 1) return 'full'
-        if (value >= starIndex + 0.5) return 'half'
-        return 'empty'
-    }
-
-    return (
-        <div className="flex items-center justify-between">
-            <Label className="text-sm">{label}</Label>
-            <div className="flex items-center gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => {
-                    const fill = getStarFill(i)
-                    return (
-                        <button
-                            key={i}
-                            type="button"
-                            onClick={(e) => handleStarClick(i, e)}
-                            className="p-0.5 relative"
-                        >
-                            {/* Background empty star */}
-                            <Star className="h-5 w-5 text-muted-foreground/30" />
-                            {/* Filled overlay */}
-                            {fill !== 'empty' && (
-                                <div
-                                    className="absolute inset-0 overflow-hidden p-0.5"
-                                    style={{ width: fill === 'half' ? '50%' : '100%' }}
-                                >
-                                    <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                                </div>
-                            )}
-                        </button>
-                    )
-                })}
-                {value !== null && (
-                    <span className="ml-1 text-xs font-mono text-muted-foreground">
-                        {value}
-                    </span>
-                )}
-                {value !== null && (
-                    <button
-                        type="button"
-                        onClick={() => onChange(null)}
-                        className="ml-1 p-1 rounded-full hover:bg-muted"
-                    >
-                        <X className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                )}
-            </div>
-        </div>
-    )
-}
 
 function MultiSelect({
     label,
@@ -627,89 +551,7 @@ function ItemsOrderedInput({
     )
 }
 
-function CuisineSelector({
-    value,
-    onChange,
-    options
-}: {
-    value: string[]
-    onChange: (value: string[]) => void
-    options: string[]
-}) {
-    const [open, setOpen] = useState(false)
-    const [inputValue, setInputValue] = useState("")
 
-    const handleSelect = (currentValue: string) => {
-        if (value.includes(currentValue)) {
-            onChange(value.filter((v) => v !== currentValue))
-        } else {
-            onChange([...value, currentValue])
-        }
-    }
-
-    const handleCreate = () => {
-        if (inputValue.trim() && !value.includes(inputValue.trim())) {
-            onChange([...value, inputValue.trim()])
-            setInputValue("")
-        }
-    }
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={open}
-                    className="w-full justify-between"
-                >
-                    {value.length > 0
-                        ? `${value.length} selected`
-                        : "Select cuisine..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-full p-0">
-                <Command>
-                    <CommandInput placeholder="Search cuisine..." value={inputValue} onValueChange={setInputValue} />
-                    <CommandList>
-                        <CommandEmpty>
-                            <div className="p-2 text-sm text-center text-muted-foreground">
-                                No cuisine found.
-                                {inputValue && (
-                                    <button
-                                        type="button"
-                                        onClick={handleCreate}
-                                        className="mt-2 block w-full rounded bg-primary px-2 py-1 text-primary-foreground hover:bg-primary/90"
-                                    >
-                                        Create "{inputValue}"
-                                    </button>
-                                )}
-                            </div>
-                        </CommandEmpty>
-                        <CommandGroup>
-                            {options.map((option) => (
-                                <CommandItem
-                                    key={option}
-                                    value={option}
-                                    onSelect={() => handleSelect(option)}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            value.includes(option) ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {option}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
-    )
-}
 
 export function FoodAddDialog({
     entry,
