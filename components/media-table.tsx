@@ -54,6 +54,7 @@ import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { Card, CardContent } from "@/components/ui/card";
 import { EpisodeWatchRecord } from "@/lib/database.types";
 import { useSortedEntries } from "@/hooks/useSortedEntries";
+import { useBatchMetadataFetch } from "@/hooks/useBatchMetadataFetch";
 
 // Parse episode history from JSON
 function parseEpisodeHistory(data: unknown): EpisodeWatchRecord[] {
@@ -225,10 +226,16 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     return defaultVisible;
   });
   const [columnsLoaded, setColumnsLoaded] = useState(false);
-  const [fetching, setFetching] = useState(false);
-  const [fetchProgress, setFetchProgress] = useState({ current: 0, total: 0 });
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
+
+  // Batch metadata fetch hook
+  const { fetching, fetchProgress, fetchMetadataForEntries } = useBatchMetadataFetch({
+    onComplete: () => {
+      onRefresh?.();
+      setSelectedEntries(new Set());
+    }
+  });
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedEntryForDetails, setSelectedEntryForDetails] = useState<MediaEntry | null>(null);
@@ -289,110 +296,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       toast.error("Please select entries to fetch");
       return;
     }
-
     const entriesToFetch = sortedEntries.filter(e => selectedEntries.has(e.id));
-
-    if (entriesToFetch.length === 0) {
-      toast.error("No entries selected");
-      return;
-    }
-
-    setFetching(true);
-    setFetchProgress({ current: 0, total: entriesToFetch.length });
-
-    let successCount = 0;
-    let failedCount = 0;
-
-    try {
-      for (let i = 0; i < entriesToFetch.length; i++) {
-        const entry = entriesToFetch[i];
-
-        if (!entry.title?.trim()) {
-          setFetchProgress({ current: i + 1, total: entriesToFetch.length });
-          continue;
-        }
-
-        try {
-          let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`;
-
-          // Pass medium parameter for books (Google Books API)
-          if (entry.medium === "Book") {
-            url += `&medium=${encodeURIComponent(entry.medium)}`;
-          } else if (entry.medium) {
-            // Map medium values to OMDB type for movies and TV shows
-            const typeMap: Record<string, string> = {
-              "Movie": "movie",
-              "TV Show": "series",
-            };
-            const omdbType = typeMap[entry.medium];
-            if (omdbType) {
-              url += `&type=${omdbType}`;
-            }
-          }
-
-          if (entry.season) {
-            url += `&season=${encodeURIComponent(entry.season)}`;
-          }
-
-          const response = await fetch(url);
-
-          if (response.ok) {
-            const meta = await response.json();
-
-            // Update entry in database (don't update type or medium)
-            const updateData: any = {};
-            // Note: type and medium are NOT updated to preserve user's categorization
-            if (meta.genre && !entry.genre) {
-              updateData.genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean);
-            }
-            if (meta.language && !entry.language) {
-              updateData.language = Array.isArray(meta.language) ? meta.language : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean);
-            }
-            if (meta.average_rating && !entry.average_rating) updateData.average_rating = meta.average_rating;
-            if (meta.length && !entry.length) updateData.length = meta.length;
-            if (meta.episodes && !entry.episodes) updateData.episodes = meta.episodes;
-            if (meta.poster_url && !entry.poster_url) updateData.poster_url = meta.poster_url;
-            if (meta.season && !entry.season) updateData.season = meta.season;
-            if (meta.imdb_id && !entry.imdb_id) updateData.imdb_id = meta.imdb_id;
-
-            if (Object.keys(updateData).length > 0) {
-              const { error } = await (supabase
-                .from("media_entries" as any) as any)
-                .update(updateData)
-                .eq("id", entry.id);
-
-              if (error) throw error;
-              successCount++;
-            }
-          } else {
-            failedCount++;
-          }
-        } catch (err) {
-          console.error(`Failed to fetch metadata for "${entry.title}":`, err);
-          failedCount++;
-        }
-
-        setFetchProgress({ current: i + 1, total: entriesToFetch.length });
-
-        if (i < entriesToFetch.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
-
-      if (successCount > 0) {
-        toast.success(`Fetched metadata for ${successCount} items${failedCount > 0 ? `, ${failedCount} failed` : ""}`);
-        onRefresh?.();
-        setSelectedEntries(new Set());
-      } else if (failedCount > 0) {
-        toast.error(`Failed to fetch metadata for ${failedCount} items`);
-      }
-    } catch (error) {
-      console.error("Batch fetch error:", error);
-      toast.error("Failed to batch fetch metadata");
-    } finally {
-      setFetching(false);
-      setFetchProgress({ current: 0, total: 0 });
-    }
+    await fetchMetadataForEntries(entriesToFetch);
   }
 
   const toggleColumn = (column: ColumnKey) => {
@@ -991,8 +896,6 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         selectedEntries={selectedEntriesArray}
         onSuccess={handleBatchEditSuccess}
       />
-
-
 
       {/* Media Details Dialog */}
       <MediaDetailsDialog
