@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlayCircle, Pencil, Trash2, Check, X } from "lucide-react";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format } from "date-fns/format"
+import { parseISO } from "date-fns/parseISO"
+import { differenceInDays } from "date-fns/differenceInDays"
 
 interface EpisodeTrackerProps {
     episodeHistory: EpisodeWatchRecord[];

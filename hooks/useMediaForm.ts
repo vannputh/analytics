@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { differenceInDays, parseISO, isValid } from "date-fns"
+import { differenceInDays } from "date-fns/differenceInDays"
+import { parseISO } from "date-fns/parseISO"
+import { isValid } from "date-fns/isValid"
 import { createEntry, updateEntry, CreateEntryInput, getUniqueFieldValues, getEntry } from "@/lib/actions"
 
 export type MediaFormData = Partial<CreateEntryInput>

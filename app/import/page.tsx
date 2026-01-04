@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import Papa from "papaparse"
 import { supabase } from "@/lib/supabase"
 import { MediaEntryInsert } from "@/lib/database.types"
 import { ArrowLeft } from "lucide-react"
@@ -88,6 +87,9 @@ export default function ImportPage() {
     setPreviewData([])
 
     try {
+      // Lazy load PapaParse only when needed
+      const Papa = (await import('papaparse')).default
+
       // First parse the CSV to get raw data
       const parseResult = await new Promise<ParsedRow[]>((resolve, reject) => {
         Papa.parse(data, {

@@ -52,7 +52,7 @@ export interface EntityTableProps<T extends BaseEntity> {
         open: boolean
         onOpenChange: (open: boolean) => void
         entry: T | null
-        onSuccess: () => void
+        onSuccess?: () => void
     }>
     coverAspectRatio?: "square" | "portrait"
     secondaryField?: keyof T

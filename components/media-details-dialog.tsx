@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { MediaEntry, EpisodeWatchRecord, MediaStatusHistory } from "@/lib/database.types";
 import { SafeImage } from "@/components/ui/safe-image";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,10 @@ import {
     Upload,
     X,
 } from "lucide-react";
-import { format, parseISO, isValid, differenceInDays } from "date-fns";
+import { format } from "date-fns/format"
+import { parseISO } from "date-fns/parseISO"
+import { isValid } from "date-fns/isValid"
+import { differenceInDays } from "date-fns/differenceInDays"
 import { getPlaceholderPoster, formatDate } from "@/lib/types";
 import { formatLanguageForDisplay } from "@/lib/language-utils";
 import { Button } from "@/components/ui/button";
@@ -64,7 +68,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { EpisodeTracker } from "@/components/shared/EpisodeTracker";
 import { StatusHistoryTimeline } from "@/components/shared/StatusHistoryTimeline";
 import { StarRatingInput } from "@/components/form-inputs/StarRatingInput";
-import { AdvancedTabContent } from "@/components/media/AdvancedTabContent";
+
+// Dynamic import for AdvancedTabContent - only load when advanced tab is opened
+const AdvancedTabContent = dynamic(
+    () => import("@/components/media/AdvancedTabContent").then(m => m.AdvancedTabContent),
+    { ssr: false }
+);
 
 interface MediaDetailsDialogProps {
     entry: MediaEntry | null;

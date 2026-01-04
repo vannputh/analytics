@@ -1,10 +1,16 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { BookEntry } from "@/lib/database.types"
 import { Badge } from "@/components/ui/badge"
-import { BookDetailsDialog } from "@/components/book-details-dialog"
 import { deleteBookEntry } from "@/lib/book-actions"
 import { EntityTable, ColumnConfig, StatusVariants } from "@/components/shared/EntityTable"
+
+// Dynamic import for dialog component - reduces initial bundle size
+const BookDetailsDialog = dynamic(
+  () => import("@/components/book-details-dialog").then(m => m.BookDetailsDialog),
+  { ssr: false }
+)
 
 const STATUS_VARIANTS: StatusVariants = {
     "Finished": "default",

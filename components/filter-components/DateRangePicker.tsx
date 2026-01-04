@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { format } from "date-fns"
+import { format } from "date-fns/format"
 import { CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"

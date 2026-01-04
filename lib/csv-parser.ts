@@ -1,5 +1,7 @@
 import { MediaEntryInsert } from "@/lib/database.types"
-import { differenceInDays, parseISO, isValid } from "date-fns"
+import { differenceInDays } from "date-fns/differenceInDays"
+import { parseISO } from "date-fns/parseISO"
+import { isValid } from "date-fns/isValid"
 
 export interface ParsedRow {
     title?: string

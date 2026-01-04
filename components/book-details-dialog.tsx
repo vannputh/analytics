@@ -21,7 +21,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { CalendarIcon, Upload, BookOpen } from "lucide-react"
-import { format } from "date-fns"
+import { format } from "date-fns/format"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {

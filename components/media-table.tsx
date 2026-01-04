@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { SafeImage } from "@/components/ui/safe-image";
 import { MediaEntry } from "@/lib/database.types";
 import { getPlaceholderPoster, formatDate, getTimeTaken } from "@/lib/types";
@@ -48,7 +49,12 @@ import {
 } from "@/components/ui/select";
 import { TYPE_OPTIONS, STATUS_OPTIONS, MEDIUM_OPTIONS } from "@/lib/types";
 
-import { MediaDetailsDialog } from "@/components/media-details-dialog";
+// Dynamic import for dialog component - reduces initial bundle size
+const MediaDetailsDialog = dynamic(
+  () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+  { ssr: false }
+);
+
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { Card, CardContent } from "@/components/ui/card";

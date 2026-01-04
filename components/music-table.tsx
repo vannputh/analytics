@@ -1,10 +1,16 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { MusicEntry } from "@/lib/database.types"
 import { Badge } from "@/components/ui/badge"
-import { MusicDetailsDialog } from "@/components/music-details-dialog"
 import { deleteMusicEntry } from "@/lib/music-actions"
 import { EntityTable, ColumnConfig, StatusVariants } from "@/components/shared/EntityTable"
+
+// Dynamic import for dialog component - reduces initial bundle size
+const MusicDetailsDialog = dynamic(
+  () => import("@/components/music-details-dialog").then(m => m.MusicDetailsDialog),
+  { ssr: false }
+)
 
 const STATUS_VARIANTS: StatusVariants = {
     "Finished": "default",
