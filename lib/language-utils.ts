@@ -1,11 +1,14 @@
 
 /**
  * Utility functions for handling language data normalization and display.
- * Handles conversion between ISO codes (en, ja, ko) and full names (English, Japanese, Korean).
+ * Handles conversion between ISO codes (en, ja, ko), native script names (한국어, 日本語),
+ * and full English names (English, Japanese, Korean).
  */
 
 // Common language code map for fallback or explicit overrides
+// Includes ISO codes, native script names, and common variations
 const LANGUAGE_CODE_MAP: Record<string, string> = {
+    // ISO codes
     "en": "English",
     "ja": "Japanese",
     "ko": "Korean",
@@ -24,6 +27,76 @@ const LANGUAGE_CODE_MAP: Record<string, string> = {
     "id": "Indonesian",
     "tl": "Filipino",
     "fil": "Filipino",
+    "ar": "Arabic",
+    "pl": "Polish",
+    "nl": "Dutch",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "fi": "Finnish",
+    "tr": "Turkish",
+    "he": "Hebrew",
+    "ms": "Malay",
+
+    // Native script names
+    "한국어": "Korean",
+    "조선어": "Korean",
+    "일본어": "Japanese",
+    "日本語": "Japanese",
+    "にほんご": "Japanese",
+    "中文": "Chinese",
+    "中国語": "Chinese",
+    "普通话": "Mandarin",
+    "國語": "Mandarin",
+    "ภาษาไทย": "Thai",
+    "ไทย": "Thai",
+    "tiếng việt": "Vietnamese",
+    "việt": "Vietnamese",
+    "bahasa indonesia": "Indonesian",
+    "bahasa melayu": "Malay",
+    "español": "Spanish",
+    "français": "French",
+    "deutsch": "German",
+    "italiano": "Italian",
+    "português": "Portuguese",
+    "русский": "Russian",
+    "العربية": "Arabic",
+    "עברית": "Hebrew",
+    "हिन्दी": "Hindi",
+    "हिंदी": "Hindi",
+    "tagalog": "Filipino",
+    "polski": "Polish",
+    "nederlands": "Dutch",
+    "svenska": "Swedish",
+    "dansk": "Danish",
+    "norsk": "Norwegian",
+    "suomi": "Finnish",
+    "türkçe": "Turkish",
+
+    // Common variations and abbreviations
+    "eng": "English",
+    "jpn": "Japanese",
+    "jap": "Japanese",
+    "jp": "Japanese",
+    "kor": "Korean",
+    "kr": "Korean",
+    "chi": "Chinese",
+    "chn": "Chinese",
+    "cn": "Chinese",
+    "spa": "Spanish",
+    "esp": "Spanish",
+    "fre": "French",
+    "fra": "French",
+    "ger": "German",
+    "deu": "German",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "rus": "Russian",
+    "ara": "Arabic",
+    "hin": "Hindi",
+    "tha": "Thai",
+    "vie": "Vietnamese",
+    "ind": "Indonesian",
 };
 
 /**
