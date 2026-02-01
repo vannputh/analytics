@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { MediaEntry, MediaStatusHistory } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
+import { normalizeLanguage } from '@/lib/language-utils'
 
 /** Revalidate all common paths after data mutations */
 function revalidateAll() {
@@ -11,7 +12,6 @@ function revalidateAll() {
   revalidatePath('/movies')
   revalidatePath('/analytics')
   revalidatePath('/books')
-  revalidatePath('/music')
 }
 
 export type ActionResponse<T> =
@@ -440,7 +440,7 @@ export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueField
     const statuses = new Set<string>()
     const mediums = new Set<string>()
     const platforms = new Set<string>()
-    const languages = new Set<string>()
+    const normalizedLanguages = new Set<string>()
 
     for (const entry of (data as any[]) || []) {
       if (entry.type) types.add(entry.type)
@@ -448,7 +448,7 @@ export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueField
       if (entry.medium) mediums.add(entry.medium)
       if (entry.platform) platforms.add(entry.platform)
 
-      // Handle language which may be string[], JSON string, or plain string
+      // Handle language which may be string[], JSON string, or plain string; normalize to English
       if (entry.language) {
         let langs: string[] = [];
         const val = entry.language as unknown; // runtime type might differ from TS type
@@ -471,7 +471,10 @@ export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueField
         }
 
         langs.forEach(l => {
-          if (l) languages.add(l.replace(/['"]+/g, '')); // Remove extra quotes if any crept in
+          const cleaned = l?.replace(/['"]+/g, '');
+          if (cleaned) {
+            normalizeLanguage(cleaned).forEach(n => normalizedLanguages.add(n));
+          }
         });
       }
     }
@@ -483,7 +486,7 @@ export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueField
         statuses: Array.from(statuses).sort(),
         mediums: Array.from(mediums).sort(),
         platforms: Array.from(platforms).sort(),
-        languages: Array.from(languages).sort(),
+        languages: Array.from(normalizedLanguages).sort(),
       }
     }
   } catch (error) {
@@ -491,6 +494,140 @@ export async function getUniqueFieldValues(): Promise<ActionResponse<UniqueField
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
+/** Parse language field from DB (array, JSON string, or comma-separated) into string[] */
+function parseLanguageValue(val: unknown): string[] {
+  if (!val) return []
+  if (Array.isArray(val)) return val.map((s) => (typeof s === 'string' ? s.trim() : String(s).trim())).filter(Boolean)
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) return parsed.map((s: unknown) => String(s).trim()).filter(Boolean)
+      } catch {
+        // ignore
+      }
+      return [trimmed]
+    }
+    return trimmed.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+  return []
+}
+
+const NORMALIZE_LANGUAGE_BATCH_SIZE = 80
+
+export async function normalizeAllMediaLanguages(): Promise<
+  ActionResponse<{ updated: number; errors: string[] }>
+> {
+  try {
+    const supabase = await createClient()
+    const { data: rows, error } = await supabase
+      .from('media_entries')
+      .select('id, language')
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    const toUpdate: { id: string; language: string[] | null }[] = []
+    for (const row of (rows as { id: string; language: unknown }[]) || []) {
+      const current = parseLanguageValue(row.language)
+      const normalized = normalizeLanguage(row.language as string | string[] | null | undefined)
+      const currentSorted = [...current].sort()
+      const normalizedSorted = [...normalized].sort()
+      if (
+        currentSorted.length !== normalizedSorted.length ||
+        currentSorted.some((c, i) => c !== normalizedSorted[i])
+      ) {
+        toUpdate.push({ id: row.id, language: normalized.length > 0 ? normalized : null })
+      }
+    }
+
+    const errors: string[] = []
+    let updated = 0
+    for (let i = 0; i < toUpdate.length; i += NORMALIZE_LANGUAGE_BATCH_SIZE) {
+      const batch = toUpdate.slice(i, i + NORMALIZE_LANGUAGE_BATCH_SIZE)
+      for (const item of batch) {
+        const { error: updateError } = await (supabase
+          .from('media_entries' as any) as any)
+          .update({ language: item.language })
+          .eq('id', item.id)
+        if (updateError) {
+          errors.push(`media ${item.id}: ${updateError.message}`)
+        } else {
+          updated++
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: { updated, errors },
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    }
+  }
+}
+
+export async function normalizeAllBookLanguages(): Promise<
+  ActionResponse<{ updated: number; errors: string[] }>
+> {
+  try {
+    const supabase = await createClient()
+    const { data: rows, error } = await supabase
+      .from('book_entries')
+      .select('id, language')
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    const toUpdate: { id: string; language: string[] | null }[] = []
+    for (const row of (rows as { id: string; language: unknown }[]) || []) {
+      const current = parseLanguageValue(row.language)
+      const normalized = normalizeLanguage(row.language as string | string[] | null | undefined)
+      const currentSorted = [...current].sort()
+      const normalizedSorted = [...normalized].sort()
+      if (
+        currentSorted.length !== normalizedSorted.length ||
+        currentSorted.some((c, i) => c !== normalizedSorted[i])
+      ) {
+        toUpdate.push({ id: row.id, language: normalized.length > 0 ? normalized : null })
+      }
+    }
+
+    const errors: string[] = []
+    let updated = 0
+    for (let i = 0; i < toUpdate.length; i += NORMALIZE_LANGUAGE_BATCH_SIZE) {
+      const batch = toUpdate.slice(i, i + NORMALIZE_LANGUAGE_BATCH_SIZE)
+      for (const item of batch) {
+        const { error: updateError } = await (supabase
+          .from('book_entries' as any) as any)
+          .update({ language: item.language })
+          .eq('id', item.id)
+        if (updateError) {
+          errors.push(`book ${item.id}: ${updateError.message}`)
+        } else {
+          updated++
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: { updated, errors },
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
     }
   }
 }

@@ -25,6 +25,7 @@ import {
   extractISBN,
   detectAndNormalizeISBN
 } from "@/lib/services/google-books";
+import { normalizeLanguageCode, normalizeLanguage } from "@/lib/language-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
         title: volumeInfo.title + (volumeInfo.subtitle ? `: ${volumeInfo.subtitle}` : ""),
         poster_url: getBookCoverUrl(volumeInfo.imageLinks),
         genre: genre,
-        language: volumeInfo.language || null,
+        language: volumeInfo.language ? (normalizeLanguageCode(volumeInfo.language) || null) : null,
         average_rating: averageRating,
         length: volumeInfo.pageCount ? `${volumeInfo.pageCount} pages` : null,
         type: "Book",
@@ -290,7 +291,9 @@ export async function GET(request: NextRequest) {
       metadata.plot = tmdbMovieData.overview || null;
       metadata.average_rating = tmdbMovieData.vote_average ? parseFloat((tmdbMovieData.vote_average).toFixed(1)) : null;
       metadata.genre = tmdbMovieData.genres?.map(g => g.name) || null;
-      metadata.language = tmdbMovieData.spoken_languages?.[0]?.name || null;
+      metadata.language = tmdbMovieData.spoken_languages?.length
+        ? normalizeLanguage(tmdbMovieData.spoken_languages.map((l) => l.name || l.iso_639_1 || "")).join(", ")
+        : null;
       metadata.imdb_id = tmdbMovieData.imdb_id || null;
       metadata.length = tmdbMovieData.runtime ? formatRuntime(tmdbMovieData.runtime) : null;
       metadata.type = "Movie";
@@ -301,7 +304,9 @@ export async function GET(request: NextRequest) {
       metadata.plot = tmdbTVData.overview || null;
       metadata.average_rating = tmdbTVData.vote_average ? parseFloat((tmdbTVData.vote_average).toFixed(1)) : null;
       metadata.genre = tmdbTVData.genres?.map(g => g.name) || null;
-      metadata.language = tmdbTVData.spoken_languages?.[0]?.name || null;
+      metadata.language = tmdbTVData.spoken_languages?.length
+        ? normalizeLanguage(tmdbTVData.spoken_languages.map((l) => l.name || l.iso_639_1 || "")).join(", ")
+        : null;
       metadata.imdb_id = tmdbTVData.external_ids?.imdb_id || null;
       metadata.type = "TV Show";
       metadata.episodes = seasonEpisodes !== null ? seasonEpisodes : episodeCount;
@@ -315,7 +320,10 @@ export async function GET(request: NextRequest) {
       metadata.plot = data.Plot || null;
       metadata.average_rating = data.imdbRating && data.imdbRating !== "N/A" ? parseFloat(data.imdbRating) : null;
       metadata.genre = data.Genre && data.Genre !== "N/A" ? data.Genre : null;
-      metadata.language = data.Language && data.Language !== "N/A" ? data.Language : null;
+      metadata.language =
+        data.Language && data.Language !== "N/A"
+          ? normalizeLanguage(data.Language).join(", ")
+          : null;
       metadata.imdb_id = data.imdbID && data.imdbID !== "N/A" ? data.imdbID : null;
       metadata.type = mapOMDBType(data.Type);
       metadata.poster_url = data.Poster && data.Poster !== "N/A" ? data.Poster : null;

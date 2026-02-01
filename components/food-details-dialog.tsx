@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-    Star,
     MapPin,
     Trash2,
     Edit2,
@@ -29,6 +28,7 @@ import {
     ImageIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { StarRatingDisplay } from "@/components/form-inputs"
 import { toast } from "sonner"
 import { formatDualCurrency, formatRestaurantDisplayName, DINING_OPTIONS } from "@/lib/food-types"
 import Image from "next/image"
@@ -41,32 +41,6 @@ interface FoodDetailsDialogProps {
     /** Open add dialog with this entry as template (same place, new visit / "Log again"). */
     onDuplicate?: (entry: FoodEntry) => void
     onDelete: (id: string) => void
-}
-
-function RatingDisplay({ label, rating }: { label: string; rating: number | null }) {
-    if (rating === null || rating === undefined) return null
-
-    return (
-        <div className="flex items-center justify-between py-1.5">
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <div className="flex items-center gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                        key={i}
-                        className={cn(
-                            "h-4 w-4",
-                            i < Math.floor(rating)
-                                ? "fill-amber-400 text-amber-400"
-                                : i < rating
-                                    ? "fill-amber-400/50 text-amber-400"
-                                    : "text-muted-foreground/30"
-                        )}
-                    />
-                ))}
-                <span className="ml-2 text-sm font-mono font-medium">{rating.toFixed(1)}</span>
-            </div>
-        </div>
-    )
 }
 
 export function FoodDetailsDialog({
@@ -268,11 +242,36 @@ export function FoodDetailsDialog({
                                         Ratings
                                     </h4>
                                     <div className="space-y-0.5 bg-muted/30 rounded-lg p-4">
-                                        <RatingDisplay label="Overall" rating={entry.overall_rating} />
-                                        <RatingDisplay label="Food" rating={entry.food_rating} />
-                                        <RatingDisplay label="Ambiance" rating={entry.ambiance_rating} />
-                                        <RatingDisplay label="Service" rating={entry.service_rating} />
-                                        <RatingDisplay label="Value" rating={entry.value_rating} />
+                                        {entry.overall_rating != null && (
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-sm text-muted-foreground">Overall</span>
+                                                <StarRatingDisplay rating={entry.overall_rating} size="md" showValue />
+                                            </div>
+                                        )}
+                                        {entry.food_rating != null && (
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-sm text-muted-foreground">Food</span>
+                                                <StarRatingDisplay rating={entry.food_rating} size="md" showValue />
+                                            </div>
+                                        )}
+                                        {entry.ambiance_rating != null && (
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-sm text-muted-foreground">Ambiance</span>
+                                                <StarRatingDisplay rating={entry.ambiance_rating} size="md" showValue />
+                                            </div>
+                                        )}
+                                        {entry.service_rating != null && (
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-sm text-muted-foreground">Service</span>
+                                                <StarRatingDisplay rating={entry.service_rating} size="md" showValue />
+                                            </div>
+                                        )}
+                                        {entry.value_rating != null && (
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-sm text-muted-foreground">Value</span>
+                                                <StarRatingDisplay rating={entry.value_rating} size="md" showValue />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

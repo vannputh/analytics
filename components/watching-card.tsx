@@ -30,6 +30,7 @@ const MediaDetailsDialog = dynamic(
 interface WatchingCardProps {
     entry: MediaEntry;
     onUpdate: (updatedEntry: MediaEntry) => void;
+    onDelete?: (id: string) => void;
 }
 
 // Parse episode history from JSON
@@ -47,7 +48,7 @@ function parseEpisodeHistory(data: unknown): EpisodeWatchRecord[] {
     return [];
 }
 
-export function WatchingCard({ entry, onUpdate }: WatchingCardProps) {
+export function WatchingCard({ entry, onUpdate, onDelete }: WatchingCardProps) {
     const [updating, setUpdating] = useState(false);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
@@ -316,6 +317,11 @@ export function WatchingCard({ entry, onUpdate }: WatchingCardProps) {
                 entry={entry}
                 open={isDetailsOpen}
                 onOpenChange={setIsDetailsOpen}
+                onSuccess={(updated) => {
+                    onUpdate(updated);
+                    setIsDetailsOpen(false);
+                }}
+                onDelete={onDelete}
             />
         </>
     );

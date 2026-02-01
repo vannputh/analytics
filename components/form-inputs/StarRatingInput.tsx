@@ -63,13 +63,13 @@ export function StarRatingInput({
                 onClick={(e) => handleStarClick(starIndex, e)}
             >
                 {fillState === "full" && (
-                    <Star className={cn(sizeClasses[size], "fill-current text-yellow-500 absolute inset-0")} />
+                    <Star className={cn(sizeClasses[size], "fill-current text-amber-400 absolute inset-0")} />
                 )}
                 {fillState === "half" && (
                     <>
                         <Star className={cn(sizeClasses[size], "text-muted-foreground/30 absolute inset-0")} />
                         <div className="absolute inset-0 overflow-hidden w-1/2">
-                            <Star className={cn(sizeClasses[size], "fill-current text-yellow-500")} />
+                            <Star className={cn(sizeClasses[size], "fill-current text-amber-400")} />
                         </div>
                     </>
                 )}
@@ -114,7 +114,7 @@ export function StarRatingInput({
                     </div>
                 </div>
             )}
-            <div className="flex text-yellow-500 gap-0.5">
+            <div className="flex text-amber-400 gap-0.5">
                 {Array.from({ length: maxStars }, (_, i) => i + 1).map((star) =>
                     renderStar(star)
                 )}

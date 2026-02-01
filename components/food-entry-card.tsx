@@ -5,8 +5,9 @@ import { FoodEntry } from "@/lib/database.types"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Star, MapPin, DollarSign, Edit2, ExternalLink, Instagram } from "lucide-react"
+import { MapPin, DollarSign, Edit2, ExternalLink, Instagram } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { StarRatingDisplay } from "@/components/form-inputs"
 import { formatDualCurrency, formatRestaurantDisplayName } from "@/lib/food-types"
 import Image from "next/image"
 
@@ -17,31 +18,6 @@ interface FoodEntryCardProps {
     onClick: () => void
     onEdit?: () => void
     compact?: boolean
-}
-
-function RatingStars({ rating, max = 5 }: { rating: number | null; max?: number }) {
-    if (rating === null || rating === undefined) return null
-
-    return (
-        <div className="flex items-center gap-0.5">
-            {Array.from({ length: max }).map((_, i) => (
-                <Star
-                    key={i}
-                    className={cn(
-                        "h-3 w-3",
-                        i < Math.floor(rating)
-                            ? "fill-amber-400 text-amber-400"
-                            : i < rating
-                                ? "fill-amber-400/50 text-amber-400"
-                                : "text-muted-foreground/30"
-                    )}
-                />
-            ))}
-            <span className="ml-1 text-xs font-mono text-muted-foreground">
-                {rating.toFixed(1)}
-            </span>
-        </div>
-    )
 }
 
 function PriceLevel({ level }: { level: string | null }) {
@@ -150,7 +126,7 @@ export function FoodEntryCard({ entry, onClick, onEdit, compact = false }: FoodE
 
                         {/* Right side: Rating & Price */}
                         <div className="flex flex-col items-end gap-1">
-                            <RatingStars rating={entry.overall_rating} />
+                            <StarRatingDisplay rating={entry.overall_rating} size="sm" />
                             <PriceLevel level={entry.price_level} />
                         </div>
                     </div>

@@ -4,14 +4,19 @@ import { createClient } from '@/lib/supabase/server'
 import { BookEntry, BookEntryInsert, BookEntryUpdate } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 import { BookFilterState } from './book-types'
+import { normalizeLanguage } from './language-utils'
 
 export async function createBookEntry(data: BookEntryInsert) {
     try {
         const supabase = await createClient()
+        const payload = { ...data }
+        if (payload.language != null && payload.language.length > 0) {
+            payload.language = normalizeLanguage(payload.language)
+        }
 
         const { data: newEntry, error } = await (supabase
             .from('book_entries' as any) as any)
-            .insert(data)
+            .insert(payload)
             .select()
             .single()
 
@@ -36,10 +41,14 @@ export async function createBookEntry(data: BookEntryInsert) {
 export async function updateBookEntry(id: string, data: BookEntryUpdate) {
     try {
         const supabase = await createClient()
+        const payload = { ...data }
+        if (payload.language != null && payload.language.length > 0) {
+            payload.language = normalizeLanguage(payload.language)
+        }
 
         const { data: updatedEntry, error } = await (supabase
             .from('book_entries' as any) as any)
-            .update(data)
+            .update(payload)
             .eq('id', id)
             .select()
             .single()

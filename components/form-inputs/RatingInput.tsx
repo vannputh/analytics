@@ -70,7 +70,7 @@ export function RatingInput({
                             type="button"
                             onClick={(e) => handleStarClick(i, e)}
                             onMouseMove={(e) => handleStarHover(i, e)}
-                            className="p-1 relative group"
+                            className="p-1 relative group hover:scale-110 transition-transform"
                         >
                             {/* Background empty star - larger size */}
                             <Star className="h-6 w-6 text-muted-foreground/30 transition-all" />

@@ -2,6 +2,7 @@ import { MediaEntryInsert } from "@/lib/database.types"
 import { differenceInDays } from "date-fns/differenceInDays"
 import { parseISO } from "date-fns/parseISO"
 import { isValid } from "date-fns/isValid"
+import { normalizeLanguage } from "@/lib/language-utils"
 
 export interface ParsedRow {
     title?: string
@@ -70,8 +71,14 @@ export function transformCleanedData(data: any[]): MediaEntryInsert[] {
                 title: row.title || "",
                 type: row.type || null,
                 season: formattedSeason,
-                language: row.language && Array.isArray(row.language) ? row.language :
-                    row.language ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean) : null,
+                language: (() => {
+                    const raw = row.language && Array.isArray(row.language)
+                        ? row.language
+                        : row.language
+                            ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean)
+                            : null;
+                    return raw && raw.length > 0 ? normalizeLanguage(raw) : null;
+                })(),
                 status: row.status || null,
                 my_rating: parsedMyRating,
                 rating: row.rating ?? null,

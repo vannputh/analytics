@@ -206,13 +206,13 @@ function AddPageContent() {
               </Button>
             )}
             <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push("/movies/analytics")}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
+                type="button"
+                variant="ghost"
+                onClick={() => router.push(returnTo ? decodeURIComponent(returnTo) : "/movies/analytics")}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
           </div>
         </form>
       </main>

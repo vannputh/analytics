@@ -2,6 +2,7 @@ import { CreateEntryInput } from './actions'
 import { differenceInDays } from 'date-fns/differenceInDays'
 import { parseISO } from 'date-fns/parseISO'
 import { isValid } from 'date-fns/isValid'
+import { normalizeLanguage } from './language-utils'
 
 // Column mapping for common variations
 const COLUMN_MAPPINGS: Record<string, string[]> = {
@@ -139,12 +140,14 @@ export function sanitizeEntry(
     if (!isNaN(num)) entry.price = num
   }
 
-  // Language (handle as array like genre)
+  // Language (handle as array like genre; normalize to English)
   const language = getValue('language')
   if (language) {
     const langStr = language.toString().trim()
     if (langStr) {
-      entry.language = langStr.split(",").map((l: string) => l.trim()).filter(Boolean)
+      const raw = langStr.split(",").map((l: string) => l.trim()).filter(Boolean)
+      const normalized = normalizeLanguage(raw)
+      entry.language = normalized.length > 0 ? normalized : undefined
     }
   }
 

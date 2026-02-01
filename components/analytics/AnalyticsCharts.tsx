@@ -180,7 +180,7 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
   // Memoize data for shared components
   const timelineData = useMemo(() => {
     return metrics.minutesByMonth.map(d => ({
-      month: formatMonthLabel(d.month),
+      month: d.month,
       hours: Math.round(d.minutes / 60 * 10) / 10
     }))
   }, [metrics.minutesByMonth])

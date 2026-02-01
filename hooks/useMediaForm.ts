@@ -7,6 +7,7 @@ import { differenceInDays } from "date-fns/differenceInDays"
 import { parseISO } from "date-fns/parseISO"
 import { isValid } from "date-fns/isValid"
 import { createEntry, updateEntry, CreateEntryInput, getUniqueFieldValues, getEntry } from "@/lib/actions"
+import { normalizeLanguage } from "@/lib/language-utils"
 
 export type MediaFormData = Partial<CreateEntryInput>
 
@@ -219,7 +220,7 @@ export function useMediaForm(entryId?: string | null) {
 
     const handleLanguageChange = (value: string) => {
         setLanguageInput(value)
-        const languages = value.split(",").map((l) => l.trim()).filter((l) => l.length > 0)
+        const languages = normalizeLanguage(value)
         setFormData({ ...formData, language: languages.length > 0 ? languages : null })
     }
 
@@ -336,11 +337,12 @@ export function useMediaForm(entryId?: string | null) {
                 ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
                 : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
             : []
-        const fetchedLanguages = metadata.language
+        let fetchedLanguages = metadata.language
             ? (Array.isArray(metadata.language)
                 ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
                 : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
             : []
+        fetchedLanguages = normalizeLanguage(fetchedLanguages)
 
         setFormData((prev) => {
             let finalGenres: string[] = []
@@ -364,17 +366,12 @@ export function useMediaForm(entryId?: string | null) {
             if (fieldsToOverride?.language && fetchedLanguages.length > 0) {
                 finalLanguages = fetchedLanguages
             } else if (fieldsToOverride?.language === false) {
-                finalLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
+                finalLanguages = prev.language ? normalizeLanguage(prev.language) : []
             } else {
-                const existingLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
-                const mergedLanguages = [...existingLanguages]
-                fetchedLanguages.forEach((l: string) => {
-                    const normalized = l.toLowerCase()
-                    if (!mergedLanguages.some((el: string) => el.toLowerCase() === normalized)) {
-                        mergedLanguages.push(l)
-                    }
-                })
-                finalLanguages = mergedLanguages
+                const existingLanguages = prev.language ? normalizeLanguage(prev.language) : []
+                const mergedSet = new Set(existingLanguages)
+                fetchedLanguages.forEach((l: string) => mergedSet.add(l))
+                finalLanguages = Array.from(mergedSet).sort()
             }
 
             const genreText = finalGenres.length > 0 ? finalGenres.join(", ") : ""

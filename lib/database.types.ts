@@ -38,28 +38,6 @@ export type BookEntry = {
   updated_at: string
 }
 
-export type MusicEntry = {
-  id: string
-  title: string
-  artist: string | null
-  album: string | null
-  type: string | null
-  duration_minutes: number | null
-  genre: string[] | null
-  release_date: string | null
-  platform: string | null
-  status: string | null
-  price: number | null
-  my_rating: number | null
-  listen_count: number | null
-  spotify_id: string | null
-  apple_music_id: string | null
-  cover_url: string | null
-  notes: string | null
-  created_at: string
-  updated_at: string
-}
-
 export type Database = {
   public: {
     Tables: {
@@ -71,15 +49,6 @@ export type Database = {
           updated_at?: string
         }
         Update: Partial<Omit<BookEntry, 'id'>>
-      }
-      music_entries: {
-        Row: MusicEntry
-        Insert: Omit<MusicEntry, 'id' | 'created_at' | 'updated_at'> & {
-          id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Omit<MusicEntry, 'id'>>
       }
       media_entries: {
         Row: {
@@ -374,10 +343,6 @@ export type UserPreferenceUpdate = TablesUpdate<"user_preferences">
 // Book types
 export type BookEntryInsert = Database['public']['Tables']['book_entries']['Insert']
 export type BookEntryUpdate = Database['public']['Tables']['book_entries']['Update']
-
-// Music types
-export type MusicEntryInsert = Database['public']['Tables']['music_entries']['Insert']
-export type MusicEntryUpdate = Database['public']['Tables']['music_entries']['Update']
 
 // Item ordered with optional price, image, and category
 export type ItemOrdered = {

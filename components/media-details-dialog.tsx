@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import { MediaEntry, EpisodeWatchRecord, MediaStatusHistory } from "@/lib/database.types";
 import { SafeImage } from "@/components/ui/safe-image";
@@ -48,7 +49,7 @@ import { parseISO } from "date-fns/parseISO"
 import { isValid } from "date-fns/isValid"
 import { differenceInDays } from "date-fns/differenceInDays"
 import { getPlaceholderPoster, formatDate } from "@/lib/types";
-import { formatLanguageForDisplay } from "@/lib/language-utils";
+import { formatLanguageForDisplay, normalizeLanguage } from "@/lib/language-utils";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,9 @@ export function MediaDetailsDialog({
     onDelete,
     onSuccess,
 }: MediaDetailsDialogProps) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     // --- State ---
     const [activeTab, setActiveTab] = useState("general");
     const [loading, setLoading] = useState(false);
@@ -162,6 +166,7 @@ export function MediaDetailsDialog({
                         initialLanguage = val.split(",").map(s => s.trim().replace(/['"]+/g, ''));
                     }
                 }
+                initialLanguage = normalizeLanguage(initialLanguage);
 
                 setFormData({
                     title: entry.title,
@@ -307,10 +312,8 @@ export function MediaDetailsDialog({
 
     const handleDelete = () => {
         if (onDelete && entry) {
-            if (confirm("Are you sure you want to delete this entry?")) {
-                onDelete(entry.id);
-                onOpenChange(false);
-            }
+            onDelete(entry.id);
+            onOpenChange(false);
         }
     };
 
@@ -908,15 +911,31 @@ export function MediaDetailsDialog({
                             </div>
                         </ScrollArea>
 
-                        <DialogFooter className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
-                            <Button
-                                variant="outline"
-                                className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
-                                onClick={handleDelete}
-                            >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                            </Button>
+                        <DialogFooter className="border-t p-4 flex flex-wrap justify-between gap-2 bg-muted/20 shrink-0 w-full z-10">
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
+                                    onClick={handleDelete}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                </Button>
+                                {entry && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-muted-foreground"
+                                        onClick={() => {
+                                            const returnTo = encodeURIComponent((pathname || "/movies") + (typeof window !== "undefined" ? window.location.search : ""));
+                                            onOpenChange(false);
+                                            router.push(`/movies/add?id=${entry.id}&returnTo=${returnTo}`);
+                                        }}
+                                    >
+                                        Open in full form
+                                    </Button>
+                                )}
+                            </div>
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
                                 <Button onClick={handleSave} disabled={loading}>

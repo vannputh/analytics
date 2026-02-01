@@ -125,6 +125,7 @@ function EntriesPageContent() {
           entries={watchingEntries}
           loading={watchingLoading}
           onUpdate={handleWatchingEntryUpdate}
+          onDelete={handleDelete}
         />
 
         {/* All Entries Header */}
@@ -217,9 +218,14 @@ function EntriesPageContent() {
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Table2 className="h-12 w-12 opacity-30 mb-4" />
                 <p className="text-sm font-mono mb-3">No entries yet</p>
-                <Button asChild>
-                  <Link href="/import">Import CSV</Link>
-                </Button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button asChild>
+                    <Link href="/movies/add">Add your first entry</Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/import">Import CSV</Link>
+                  </Button>
+                </div>
               </div>
             ) : filteredEntries.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

@@ -10,9 +10,10 @@ interface WatchingSectionProps {
     entries: MediaEntry[]
     loading: boolean
     onUpdate: (updatedEntry: MediaEntry) => void
+    onDelete?: (id: string) => void
 }
 
-export function WatchingSection({ entries, loading, onUpdate }: WatchingSectionProps) {
+export function WatchingSection({ entries, loading, onUpdate, onDelete }: WatchingSectionProps) {
     const [collapsed, setCollapsed] = useState(false)
 
     if (!loading && entries.length === 0) return null
@@ -50,6 +51,7 @@ export function WatchingSection({ entries, loading, onUpdate }: WatchingSectionP
                                     <WatchingCard
                                         entry={entry}
                                         onUpdate={onUpdate}
+                                        onDelete={onDelete}
                                     />
                                 </div>
                             ))

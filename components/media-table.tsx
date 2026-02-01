@@ -58,6 +58,7 @@ const MediaDetailsDialog = dynamic(
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { Card, CardContent } from "@/components/ui/card";
+import { StarRatingDisplay } from "@/components/form-inputs";
 import { EpisodeWatchRecord } from "@/lib/database.types";
 import { useSortedEntries } from "@/hooks/useSortedEntries";
 import { useBatchMetadataFetch } from "@/hooks/useBatchMetadataFetch";
@@ -180,9 +181,11 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       case "length":
         // Sort by string value for now, could be improved to parse specific formats if needed
         return entry.length || "";
-      case "language":
-        // Sort by first language
-        return Array.isArray(entry.language) && entry.language.length > 0 ? entry.language[0].toLowerCase() : "";
+      case "language": {
+        // Sort by first normalized language for consistent alphabetical order
+        const normalized = normalizeLanguage(entry.language);
+        return normalized.length > 0 ? normalized[0].toLowerCase() : "";
+      }
       case "price":
         return entry.price || 0;
       case "time_taken":
@@ -467,8 +470,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     })()}
                   </div>
                   <div className="mt-auto pt-1 flex items-center justify-between">
-                    {entry.my_rating ? (
-                      <span className="text-xs font-medium">★ {entry.my_rating}</span>
+                    {entry.my_rating != null ? (
+                      <StarRatingDisplay rating={entry.my_rating} max={10} size="sm" />
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
@@ -805,10 +808,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   )}
                   {visibleColumns.has("my_rating") && (
                     <TableCell className="py-3">
-                      {entry.my_rating ? (
-                        <div className="font-medium">
-                          ★ {entry.my_rating % 1 === 0 ? entry.my_rating : entry.my_rating.toFixed(1)}
-                        </div>
+                      {entry.my_rating != null ? (
+                        <StarRatingDisplay rating={entry.my_rating} max={10} size="sm" />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -816,10 +817,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   )}
                   {visibleColumns.has("average_rating") && (
                     <TableCell className="py-3">
-                      {entry.average_rating ? (
-                        <div className="font-medium text-sm">
-                          ★ {entry.average_rating % 1 === 0 ? entry.average_rating : entry.average_rating.toFixed(1)}
-                        </div>
+                      {entry.average_rating != null ? (
+                        <StarRatingDisplay rating={entry.average_rating} max={10} size="sm" />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

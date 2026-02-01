@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeLanguage } from '@/lib/language-utils'
 
 const OMDB_API_KEY = process.env.OMDB_API_KEY
 
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
       imdb_id: data.imdbID,
       medium: mapOMDBTypeToMedium(data.Type),
       type: data.Genre !== 'N/A' ? data.Genre : null,
-      language: data.Language !== 'N/A' ? data.Language.split(',')[0].trim() : null,
+      language: data.Language !== 'N/A' ? normalizeLanguage(data.Language).join(', ') : null,
       length: data.Runtime !== 'N/A' ? data.Runtime : null,
       totalSeasons: data.totalSeasons,
       plot: data.Plot !== 'N/A' ? data.Plot : null,

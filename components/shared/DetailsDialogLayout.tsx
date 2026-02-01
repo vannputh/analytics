@@ -29,12 +29,12 @@ export interface DetailsDialogLayoutProps {
     title: string
     subtitle?: string
     isNewEntry: boolean
-    entityTypeLabel: string // "Book", "Music", etc.
+    entityTypeLabel: string // "Book", "Movie", etc.
     placeholderIcon: React.ReactNode
 
     // Cover
     coverUrl?: string | null
-    coverAspectRatio?: "square" | "portrait" // square for music, portrait for books
+    coverAspectRatio?: "square" | "portrait" // square for albums, portrait for books
     onCoverUploadClick: () => void
 
     // Tabs

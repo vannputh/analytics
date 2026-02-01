@@ -51,6 +51,7 @@ export const defaultBookFilterState: BookFilterState = {
 };
 
 import { BookEntry } from "./database.types";
+import { normalizeLanguage } from "./language-utils";
 
 /**
  * Apply filters to a list of book entries
@@ -81,12 +82,13 @@ export function applyBookFilters(data: BookEntry[], filters: BookFilterState): B
             if (!entry.format || !filters.formats.includes(entry.format)) return false
         }
 
-        // Language filter (AND logic)
+        // Language filter (AND logic) - compare normalized English names
         if (filters.languages.length > 0) {
             if (!entry.language || !Array.isArray(entry.language)) return false
-            const entryLanguages = entry.language.map((l) => l.toLowerCase().trim())
-            for (const filterLang of filters.languages) {
-                if (!entryLanguages.includes(filterLang.toLowerCase().trim())) return false
+            const entryLanguages = normalizeLanguage(entry.language)
+            const filterLanguages = normalizeLanguage(filters.languages)
+            for (const filterLang of filterLanguages) {
+                if (!entryLanguages.includes(filterLang)) return false
             }
         }
 
@@ -127,12 +129,9 @@ export function extractBookFilterOptions(data: BookEntry[]) {
             })
         }
 
-        // Handle language array
+        // Handle language array - normalize to English for filter options
         if (entry.language && Array.isArray(entry.language)) {
-            entry.language.forEach((l) => {
-                const trimmed = typeof l === 'string' ? l.trim() : String(l).trim()
-                if (trimmed) languages.add(trimmed)
-            })
+            normalizeLanguage(entry.language).forEach((l) => languages.add(l))
         }
     }
 

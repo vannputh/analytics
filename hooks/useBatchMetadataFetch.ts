@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { MediaEntry } from "@/lib/database.types";
+import { normalizeLanguage } from "@/lib/language-utils";
 
 interface UseBatchMetadataFetchOptions {
     onComplete?: () => void;
@@ -66,9 +67,7 @@ export function useBatchMetadataFetch(options?: UseBatchMetadataFetchOptions) {
                                 : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean);
                         }
                         if (meta.language && !entry.language) {
-                            updateData.language = Array.isArray(meta.language)
-                                ? meta.language
-                                : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean);
+                            updateData.language = normalizeLanguage(meta.language);
                         }
                         if (meta.average_rating && !entry.average_rating) updateData.average_rating = meta.average_rating;
                         if (meta.length && !entry.length) updateData.length = meta.length;

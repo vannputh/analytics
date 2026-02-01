@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { ParsedRow, transformCleanedData } from "@/lib/csv-parser"
+import { normalizeAllMediaLanguages, normalizeAllBookLanguages } from "@/lib/actions"
 
 // Import modular components
 import { ImportFileUpload } from "@/components/import/ImportFileUpload"
@@ -34,6 +35,7 @@ export default function ImportPage() {
     success: number
     failed: number
   } | null>(null)
+  const [normalizing, setNormalizing] = useState(false)
 
   // Timer for cleaning progress
   useEffect(() => {
@@ -305,7 +307,10 @@ export default function ImportPage() {
             // Update entry with fetched metadata (only if field is empty)
             if (meta.type && !entry.type) updatedData[i].type = meta.type
             if (meta.genre && !entry.genre) updatedData[i].genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean)
-            if (meta.language && !entry.language) updatedData[i].language = Array.isArray(meta.language) ? meta.language : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean)
+            if (meta.language && !entry.language) {
+              const { normalizeLanguage } = await import("@/lib/language-utils")
+              updatedData[i].language = normalizeLanguage(meta.language)
+            }
             if (meta.average_rating && !entry.average_rating) updatedData[i].average_rating = meta.average_rating
             if (meta.length && !entry.length) updatedData[i].length = meta.length
             if (meta.episodes && !entry.episodes) updatedData[i].episodes = meta.episodes
@@ -359,6 +364,34 @@ export default function ImportPage() {
     }
   }
 
+  async function handleNormalizeLanguages() {
+    setNormalizing(true)
+    try {
+      const [mediaRes, bookRes] = await Promise.all([
+        normalizeAllMediaLanguages(),
+        normalizeAllBookLanguages(),
+      ])
+      const mediaUpdated = mediaRes.success ? mediaRes.data.updated : 0
+      const bookUpdated = bookRes.success ? bookRes.data.updated : 0
+      const mediaErrors = mediaRes.success ? mediaRes.data.errors : []
+      const bookErrors = bookRes.success ? bookRes.data.errors : []
+      if (mediaErrors.length > 0 || bookErrors.length > 0) {
+        const errMsg = [...mediaErrors, ...bookErrors].slice(0, 3).join("; ")
+        toast.warning(`Updated ${mediaUpdated} media, ${bookUpdated} books. Some errors: ${errMsg}`)
+      } else if (mediaUpdated > 0 || bookUpdated > 0) {
+        toast.success(`Normalized languages: ${mediaUpdated} media entries, ${bookUpdated} book entries`)
+      } else {
+        toast.info("All language values are already normalized")
+      }
+      if (!mediaRes.success) toast.error(mediaRes.error)
+      if (!bookRes.success) toast.error(bookRes.error)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to normalize languages")
+    } finally {
+      setNormalizing(false)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -405,6 +438,21 @@ export default function ImportPage() {
           previewData={previewData}
           totalRows={totalRows}
         />
+
+        <section className="rounded-lg border bg-card p-4">
+          <h2 className="text-sm font-medium mb-2">Data tools</h2>
+          <p className="text-muted-foreground text-xs mb-3">
+            Normalize all stored language values to English (e.g. 한국어 → Korean). Safe to run multiple times.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleNormalizeLanguages}
+            disabled={normalizing}
+          >
+            {normalizing ? "Normalizing…" : "Normalize existing languages to English"}
+          </Button>
+        </section>
 
         <ImportFormatGuide />
       </div>
