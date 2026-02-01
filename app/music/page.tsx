@@ -3,8 +3,8 @@ import { MusicTable } from "@/components/music-table"
 import { PageHeader } from "@/components/page-header"
 import { Metadata } from "next"
 
-// Revalidate every 60 seconds for fresh data while allowing caching
-export const revalidate = 60
+// Force dynamic rendering as we use cookies
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
     title: "Music - Media Review",

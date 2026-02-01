@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
-import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown } from "lucide-react"
+import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { ItemOrdered } from "@/lib/database.types"
 import { formatDualCurrency } from "@/lib/food-types"
 import { Badge } from "@/components/ui/badge"
+import { ImageCropDialog } from "./ImageCropDialog"
 import {
     Command,
     CommandEmpty,
@@ -138,6 +139,51 @@ export function ItemsOrderedInput({
     // We'll store new item categories in a state
     const [newItemCategories, setNewItemCategories] = useState<string[]>([])
 
+    // Crop/Edit state
+    const [cropImage, setCropImage] = useState<{ index: number; src: string } | null>(null)
+    const [isConverting, setIsConverting] = useState(false)
+
+    // Convert HEIC to JPEG if needed
+    const convertHeicIfNeeded = async (file: File): Promise<File> => {
+        const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
+            file.name.toLowerCase().endsWith('.heic') ||
+            file.name.toLowerCase().endsWith('.heif')
+
+        if (!isHeic) {
+            return file
+        }
+
+        try {
+            setIsConverting(true)
+            // Dynamically import heic2any to reduce bundle size
+            const heic2any = (await import('heic2any')).default
+
+            const convertedBlob = await heic2any({
+                blob: file,
+                toType: 'image/jpeg',
+                quality: 0.95
+            })
+
+            // heic2any can return an array or a single blob
+            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob
+
+            // Create a new File from the converted blob
+            const convertedFile = new File(
+                [blob],
+                file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'),
+                { type: 'image/jpeg' }
+            )
+
+            return convertedFile
+        } catch (error) {
+            console.error('Error converting HEIC:', error)
+            toast.error('Failed to convert HEIC image. Please try a different format.')
+            throw error
+        } finally {
+            setIsConverting(false)
+        }
+    }
+
     // Legacy fix: ensure all items have categories array
     useEffect(() => {
         const needsUpdate = value.some(item => !item.categories && item.category)
@@ -197,7 +243,7 @@ export function ItemsOrderedInput({
         onChange(updated)
     }
 
-    const handleItemImage = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleItemImage = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
 
@@ -206,17 +252,61 @@ export function ItemsOrderedInput({
             return
         }
 
-        const reader = new FileReader()
-        reader.onloadend = () => {
-            const updated = [...value]
-            updated[index] = {
-                ...updated[index],
-                file,
-                preview: reader.result as string
+        try {
+            setIsConverting(true)
+            const processedFile = await convertHeicIfNeeded(file)
+
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                const updated = [...value]
+                updated[index] = {
+                    ...updated[index],
+                    file: processedFile,
+                    preview: reader.result as string
+                }
+                onChange(updated)
             }
-            onChange(updated)
+            reader.readAsDataURL(processedFile)
+        } catch (error) {
+            // Error handled in convertHeicIfNeeded
+        } finally {
+            setIsConverting(false)
+            // Reset input
+            if (fileInputRefs.current[`file_${index}`]) {
+                fileInputRefs.current[`file_${index}`]!.value = ''
+            }
+            if (fileInputRefs.current[`camera_${index}`]) {
+                fileInputRefs.current[`camera_${index}`]!.value = ''
+            }
         }
-        reader.readAsDataURL(file)
+    }
+
+    const handleEditImage = (index: number) => {
+        const item = value[index];
+        const preview = item.preview || item.image_url;
+        if (preview) {
+            setCropImage({ index, src: preview })
+        }
+    }
+
+    const handleCropComplete = (croppedImageUrl: string) => {
+        if (cropImage === null) return
+
+        // Convert base64 to File
+        fetch(croppedImageUrl)
+            .then(res => res.blob())
+            .then(blob => {
+                const file = new File([blob], `cropped-${Date.now()}.jpg`, { type: 'image/jpeg' })
+                const updated = [...value]
+                updated[cropImage.index] = {
+                    ...updated[cropImage.index],
+                    file,
+                    preview: croppedImageUrl
+                }
+                onChange(updated)
+            })
+
+        setCropImage(null)
     }
 
     const removeItemImage = (index: number) => {
@@ -286,37 +376,54 @@ export function ItemsOrderedInput({
                                 {/* Item image preview or add buttons */}
                                 <div className="relative flex-shrink-0 mt-1">
                                     {item.preview || item.image_url ? (
-                                        <div className="relative w-12 h-12 rounded-md overflow-hidden ring-1 ring-border">
+                                        <div className="relative w-12 h-12 rounded-md overflow-hidden ring-1 ring-border group/image">
                                             <Image
                                                 src={item.preview || item.image_url || ''}
                                                 alt={item.name}
                                                 fill
                                                 className="object-cover"
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => removeItemImage(index)}
-                                                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
-                                            >
-                                                <X className="h-4 w-4 text-white" />
-                                            </button>
+                                            {/* Edit/Remove Overlay */}
+                                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center gap-1 opacity-0 group-hover/image:opacity-100 transition-opacity">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleEditImage(index)}
+                                                    className="p-1 rounded-full bg-white/20 text-white hover:bg-white/40"
+                                                    title="Crop image"
+                                                >
+                                                    <Edit2 className="h-3 w-3" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeItemImage(index)}
+                                                    className="p-1 rounded-full bg-destructive/80 text-white hover:bg-destructive"
+                                                    title="Remove image"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => fileInputRefs.current[`file_${index}`]?.click()}
-                                                className="w-12 h-12 rounded-md border-2 border-dashed flex items-center justify-center text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-muted/50"
+                                                disabled={isConverting}
+                                                className="w-12 h-12 rounded-md border-2 border-dashed flex items-center justify-center text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-muted/50 disabled:opacity-50"
                                                 title="Upload photo"
                                             >
-                                                <Camera className="h-4 w-4" />
+                                                {isConverting ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Camera className="h-4 w-4" />
+                                                )}
                                             </button>
                                         </div>
                                     )}
                                     <input
                                         ref={(el) => { fileInputRefs.current[`file_${index}`] = el }}
                                         type="file"
-                                        accept="image/*"
+                                        accept="image/*,.heic,.heif"
                                         className="hidden"
                                         onChange={(e) => handleItemImage(index, e)}
                                     />
@@ -392,7 +499,20 @@ export function ItemsOrderedInput({
                     )}
                 </div>
             )}
-        </div>
+
+
+            {/* Crop Dialog */}
+            {
+                cropImage && (
+                    <ImageCropDialog
+                        open={!!cropImage}
+                        onOpenChange={(open) => !open && setCropImage(null)}
+                        imageSrc={cropImage.src}
+                        onCropComplete={handleCropComplete}
+                    />
+                )
+            }
+        </div >
     )
 }
 

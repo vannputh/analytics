@@ -3,6 +3,8 @@ import { PageHeader } from "@/components/page-header"
 import { AnalyticsClient } from "./analytics-client"
 import { AlertCircle } from "lucide-react"
 
+export const dynamic = 'force-dynamic'
+
 export default async function FoodAnalyticsPage() {
     try {
         // Fetch all filter options and initial data in parallel

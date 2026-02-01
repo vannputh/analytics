@@ -120,8 +120,8 @@ function LoginPageContent() {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!otpCode || otpCode.length !== 6) {
-      toast.error("Please enter the 6-digit code")
+    if (!otpCode || otpCode.length < 6 || otpCode.length > 12) {
+      toast.error("Please enter a valid verification code")
       return
     }
 

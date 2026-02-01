@@ -1,6 +1,11 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
+  // Enable turbopack root for restricted workspace
+  turbopack: {
+    root: process.cwd(),
+  },
+
   // Enable compression for smaller responses
   compress: true,
 
