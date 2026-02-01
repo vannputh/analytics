@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { ImageCropDialog } from "./ImageCropDialog"
+import { convertHeicToJpeg } from "@/lib/heic-utils"
 import { toast } from "sonner"
 
 interface PlaceImage {
@@ -19,53 +20,28 @@ interface PlaceImageUploadProps {
     images: PlaceImage[]
     onImagesChange: (images: PlaceImage[]) => void
     onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>
+    /** Rendered inline with Upload / Take Photo buttons (e.g. Google Maps autofill input) */
+    trailing?: React.ReactNode
 }
 
 export function PlaceImageUpload({
     images,
     onImagesChange,
     onFileSelect,
+    trailing,
 }: PlaceImageUploadProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const cameraInputRef = useRef<HTMLInputElement>(null)
     const [cropImage, setCropImage] = useState<{ index: number; src: string } | null>(null)
     const [isConverting, setIsConverting] = useState(false)
 
-    // Convert HEIC to JPEG if needed
     const convertHeicIfNeeded = async (file: File): Promise<File> => {
-        const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
-            file.name.toLowerCase().endsWith('.heic') ||
-            file.name.toLowerCase().endsWith('.heif')
-
-        if (!isHeic) {
-            return file
-        }
-
         try {
             setIsConverting(true)
-            // Dynamically import heic2any to reduce bundle size
-            const heic2any = (await import('heic2any')).default
-
-            const convertedBlob = await heic2any({
-                blob: file,
-                toType: 'image/jpeg',
-                quality: 0.95
-            })
-
-            // heic2any can return an array or a single blob
-            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob
-
-            // Create a new File from the converted blob
-            const convertedFile = new File(
-                [blob],
-                file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'),
-                { type: 'image/jpeg' }
-            )
-
-            return convertedFile
+            return await convertHeicToJpeg(file)
         } catch (error) {
-            console.error('Error converting HEIC:', error)
-            toast.error('Failed to convert HEIC image. Please try a different format.')
+            console.error("Error converting HEIC:", error)
+            toast.error("Failed to convert HEIC image. Please try a different format.")
             throw error
         } finally {
             setIsConverting(false)
@@ -78,15 +54,15 @@ export function PlaceImageUpload({
 
         setIsConverting(true)
         try {
-            // Convert HEIC files if needed
             const convertedFiles: File[] = []
             for (const file of Array.from(files)) {
                 try {
-                    const convertedFile = await convertHeicIfNeeded(file)
+                    const convertedFile = await convertHeicToJpeg(file)
                     convertedFiles.push(convertedFile)
                 } catch (error) {
+                    console.error("Error converting HEIC:", error)
+                    toast.error("Failed to convert HEIC image. Please try a different format.")
                     // Skip files that failed conversion
-                    continue
                 }
             }
 
@@ -209,8 +185,8 @@ export function PlaceImageUpload({
                     </div>
                 )}
 
-                {/* Upload buttons */}
-                <div className="flex gap-2">
+                {/* Upload buttons + optional trailing (e.g. autofill input) */}
+                <div className="flex flex-wrap gap-2 items-center">
                     <Button
                         type="button"
                         variant="outline"
@@ -240,6 +216,7 @@ export function PlaceImageUpload({
                         <Camera className="h-4 w-4 mr-2" />
                         Take Photo
                     </Button>
+                    {trailing}
                 </div>
 
                 <input

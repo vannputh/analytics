@@ -12,7 +12,8 @@ export default function FoodPage() {
 
 
     const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null)
-    const [isAdding, setIsAdding] = useState(false)
+    const [templateEntry, setTemplateEntry] = useState<FoodEntry | null>(null)
+    const [initialDateForAdd, setInitialDateForAdd] = useState<string | undefined>(undefined)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -28,8 +29,18 @@ export default function FoodPage() {
         setIsAddOpen(true)
     }, [])
 
-    const handleAddEntry = useCallback(() => {
+    const handleAddEntry = useCallback((date?: string) => {
         setEditingEntry(null)
+        setTemplateEntry(null)
+        setInitialDateForAdd(date)
+        setIsAddOpen(true)
+    }, [])
+
+    const handleDuplicateEntry = useCallback((entry: FoodEntry) => {
+        setTemplateEntry(entry)
+        setEditingEntry(null)
+        setInitialDateForAdd(new Date().toISOString().slice(0, 10))
+        setIsDetailsOpen(false)
         setIsAddOpen(true)
     }, [])
 
@@ -41,12 +52,13 @@ export default function FoodPage() {
         setRefreshTrigger((prev) => prev + 1)
         setIsAddOpen(false)
         setEditingEntry(null)
+        setTemplateEntry(null)
     }, [])
 
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
-            <PageHeader title="Food & Drinks" />
+            <PageHeader title="Food & Drinks" openFoodAddDialog={handleAddEntry} />
 
             {/* Main Content */}
             <main className="p-4 sm:p-6">
@@ -64,6 +76,7 @@ export default function FoodPage() {
                 open={isDetailsOpen}
                 onOpenChange={setIsDetailsOpen}
                 onEdit={handleEditEntry}
+                onDuplicate={handleDuplicateEntry}
                 onDelete={handleDeleteEntry}
             />
 
@@ -75,9 +88,13 @@ export default function FoodPage() {
                     setIsAddOpen(open)
                     if (!open) {
                         setEditingEntry(null)
+                        setTemplateEntry(null)
+                        setInitialDateForAdd(undefined)
                     }
                 }}
                 onSuccess={handleEntrySuccess}
+                initialDate={initialDateForAdd}
+                template={templateEntry}
             />
         </div>
     )

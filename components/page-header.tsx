@@ -45,9 +45,11 @@ type WorkspaceKey = keyof typeof WORKSPACES
 
 interface PageHeaderProps {
   title: string
+  /** When on food workspace, opening Add uses this instead of the header's own dialog (single dialog, can receive calendar date). */
+  openFoodAddDialog?: (initialDate?: string) => void
 }
 
-export function PageHeader({ title }: PageHeaderProps) {
+export function PageHeader({ title, openFoodAddDialog }: PageHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [showBookDialog, setShowBookDialog] = useState(false)
@@ -175,7 +177,7 @@ export function PageHeader({ title }: PageHeaderProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowFoodDialog(true)}
+              onClick={() => (openFoodAddDialog ? openFoodAddDialog() : setShowFoodDialog(true))}
               className="px-2 sm:px-3"
             >
               <Plus className="h-4 w-4 sm:mr-1.5" />
@@ -223,15 +225,17 @@ export function PageHeader({ title }: PageHeaderProps) {
           router.refresh()
         }}
       />
-      <FoodAddDialog
-        open={showFoodDialog}
-        onOpenChange={setShowFoodDialog}
-        onSuccess={() => {
-          setShowFoodDialog(false)
-          router.refresh()
-        }}
-        initialDate={new Date().toISOString()}
-      />
+      {!(currentWorkspaceKey === "food" && openFoodAddDialog) && (
+        <FoodAddDialog
+          open={showFoodDialog}
+          onOpenChange={setShowFoodDialog}
+          onSuccess={() => {
+            setShowFoodDialog(false)
+            router.refresh()
+          }}
+          initialDate={new Date().toISOString()}
+        />
+      )}
     </header>
   )
 }

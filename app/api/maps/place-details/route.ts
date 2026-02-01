@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Goog-Api-Key': apiKey,
-                    'X-Goog-FieldMask': 'id,displayName,formattedAddress,priceLevel,rating,websiteUri,location,addressComponents,photos'
+                    'X-Goog-FieldMask': 'id,displayName,formattedAddress,priceLevel,websiteUri,location,addressComponents,photos'
                 }
             });
 
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Goog-Api-Key': apiKey,
-                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.priceLevel,places.rating,places.websiteUri,places.location,places.addressComponents,places.photos'
+                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.priceLevel,places.websiteUri,places.location,places.addressComponents,places.photos'
                 },
                 body: JSON.stringify(searchBody)
             });
@@ -213,7 +213,6 @@ export async function POST(request: NextRequest) {
             name: placeData.displayName?.text || "",
             address: placeData.formattedAddress || "",
             website: placeData.websiteUri || "",
-            rating: placeData.rating || null,
             priceLevel: priceLevelMap[placeData.priceLevel] || null,
             neighborhood,
             city,

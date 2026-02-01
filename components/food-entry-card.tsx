@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { FoodEntry } from "@/lib/database.types"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +9,8 @@ import { Star, MapPin, DollarSign, Edit2, ExternalLink, Instagram } from "lucide
 import { cn } from "@/lib/utils"
 import { formatDualCurrency } from "@/lib/food-types"
 import Image from "next/image"
+
+const CLICK_DELAY_MS = 250
 
 interface FoodEntryCardProps {
     entry: FoodEntry
@@ -61,13 +64,33 @@ function PriceLevel({ level }: { level: string | null }) {
 }
 
 export function FoodEntryCard({ entry, onClick, onEdit, compact = false }: FoodEntryCardProps) {
+    const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const handleClick = () => {
+        if (clickTimeoutRef.current) return // part of a double-click, ignore
+        clickTimeoutRef.current = setTimeout(() => {
+            clickTimeoutRef.current = null
+            onClick()
+        }, CLICK_DELAY_MS)
+    }
+
+    const handleDoubleClick = (e: React.MouseEvent) => {
+        if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current)
+            clickTimeoutRef.current = null
+        }
+        e.preventDefault()
+        onEdit?.()
+    }
+
     return (
         <Card
             className={cn(
                 "group cursor-pointer transition-all hover:shadow-md hover:border-primary/50 overflow-hidden",
                 compact && "border-0 shadow-none"
             )}
-            onClick={onClick}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
         >
             <CardContent className={cn("p-0 full-height flex flex-col h-full")}>
                 {/* Image Section */}

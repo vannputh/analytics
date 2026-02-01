@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CalendarDayCell } from "@/components/food/CalendarDayCell"
 
 interface FoodCalendarViewProps {
-    onAddEntry: () => void
+    onAddEntry?: (initialDate?: string) => void
     onViewEntry: (entry: FoodEntry) => void
     onEditEntry: (entry: FoodEntry) => void
     refreshTrigger?: number
@@ -194,6 +194,7 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                                 entries={entries}
                                 loading={loading}
                                 onClick={() => setSelectedDate(isSelected ? null : dayInfo.date)}
+                                onAddForDate={(d) => onAddEntry?.(d)}
                             />
                         )
                     })}
@@ -203,7 +204,7 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
             {/* Selected Date Entries */}
             {selectedDate && (
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                         <h3 className="text-sm font-medium font-mono">
                             {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
                                 weekday: "long",
@@ -211,16 +212,24 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                                 day: "numeric",
                             })}
                         </h3>
-                        <span className="text-xs text-muted-foreground">
-                            {selectedEntries.length} {selectedEntries.length === 1 ? "entry" : "entries"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                                {selectedEntries.length} {selectedEntries.length === 1 ? "entry" : "entries"}
+                            </span>
+                            {selectedEntries.length > 0 && (
+                                <Button variant="outline" size="sm" onClick={() => onAddEntry?.(selectedDate)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add entry
+                                </Button>
+                            )}
+                        </div>
                     </div>
 
                     {selectedEntries.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border border-dashed rounded-lg">
                             <Utensils className="h-8 w-8 opacity-30 mb-2" />
                             <p className="text-sm mb-3">No entries for this day</p>
-                            <Button variant="outline" size="sm" onClick={onAddEntry}>
+                            <Button variant="outline" size="sm" onClick={() => onAddEntry?.(selectedDate)}>
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Entry
                             </Button>
@@ -256,7 +265,7 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border border-dashed rounded-lg">
                             <Utensils className="h-8 w-8 opacity-30 mb-2" />
                             <p className="text-sm mb-3">No entries this month</p>
-                            <Button variant="outline" size="sm" onClick={onAddEntry}>
+                            <Button variant="outline" size="sm" onClick={() => onAddEntry?.()}>
                                 <Plus className="h-4 w-4 mr-2" />
                                 Add Entry
                             </Button>

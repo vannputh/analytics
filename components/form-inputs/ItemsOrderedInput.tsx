@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
-import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2 } from "lucide-react"
+import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2, ClipboardPaste, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { convertHeicToJpeg } from "@/lib/heic-utils"
 import { toast } from "sonner"
 import { ItemOrdered } from "@/lib/database.types"
 import { formatDualCurrency } from "@/lib/food-types"
@@ -25,6 +26,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import { Textarea } from "@/components/ui/textarea"
 
 interface ItemWithPreview extends ItemOrdered {
     file?: File
@@ -143,41 +145,13 @@ export function ItemsOrderedInput({
     const [cropImage, setCropImage] = useState<{ index: number; src: string } | null>(null)
     const [isConverting, setIsConverting] = useState(false)
 
-    // Convert HEIC to JPEG if needed
     const convertHeicIfNeeded = async (file: File): Promise<File> => {
-        const isHeic = file.type === 'image/heic' || file.type === 'image/heif' ||
-            file.name.toLowerCase().endsWith('.heic') ||
-            file.name.toLowerCase().endsWith('.heif')
-
-        if (!isHeic) {
-            return file
-        }
-
         try {
             setIsConverting(true)
-            // Dynamically import heic2any to reduce bundle size
-            const heic2any = (await import('heic2any')).default
-
-            const convertedBlob = await heic2any({
-                blob: file,
-                toType: 'image/jpeg',
-                quality: 0.95
-            })
-
-            // heic2any can return an array or a single blob
-            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob
-
-            // Create a new File from the converted blob
-            const convertedFile = new File(
-                [blob],
-                file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'),
-                { type: 'image/jpeg' }
-            )
-
-            return convertedFile
+            return await convertHeicToJpeg(file)
         } catch (error) {
-            console.error('Error converting HEIC:', error)
-            toast.error('Failed to convert HEIC image. Please try a different format.')
+            console.error("Error converting HEIC:", error)
+            toast.error("Failed to convert HEIC image. Please try a different format.")
             throw error
         } finally {
             setIsConverting(false)
@@ -196,6 +170,7 @@ export function ItemsOrderedInput({
     }, []) // Run once on mount
 
     const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+    const nameInputRef = useRef<HTMLInputElement>(null)
 
     const addItem = () => {
         if (newItemName.trim()) {
@@ -210,7 +185,47 @@ export function ItemsOrderedInput({
             setNewItemName("")
             setNewItemPrice("")
             setNewItemCategories([])
+            requestAnimationFrame(() => nameInputRef.current?.focus())
         }
+    }
+
+    // Parse bulk paste: one item per line; optional price at end (e.g. "Dish – 5.00" or "Dish 5" or "Dish")
+    const parseBulkLines = (text: string): { name: string; price: number | null }[] => {
+        return text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => {
+                const priceMatch = line.match(/\s*[–\-$]\s*(\d+(?:\.\d{1,2})?)\s*$|\s+(\d+(?:\.\d{1,2})?)\s*$/)
+                if (priceMatch) {
+                    const price = parseFloat(priceMatch[1] ?? priceMatch[2] ?? "0")
+                    const name = line.replace(/\s*[–\-$]\s*\d+(?:\.\d{1,2})?\s*$|\s+\d+(?:\.\d{1,2})?\s*$/, "").trim()
+                    return { name: name || line, price }
+                }
+                return { name: line, price: null }
+            })
+    }
+
+    const [bulkPasteText, setBulkPasteText] = useState("")
+    const [showBulkPaste, setShowBulkPaste] = useState(false)
+
+    const addFromBulkPaste = () => {
+        const parsed = parseBulkLines(bulkPasteText)
+        if (parsed.length === 0) {
+            toast.error("No valid lines to add. Use one item per line, e.g. \"Dish name – 5.00\"")
+            return
+        }
+        const newItems: ItemWithPreview[] = parsed.map(({ name, price }) => ({
+            name,
+            price,
+            image_url: null,
+            categories: null,
+            category: null,
+        }))
+        onChange([...value, ...newItems])
+        setBulkPasteText("")
+        setShowBulkPaste(false)
+        toast.success(`Added ${parsed.length} item${parsed.length === 1 ? "" : "s"}`)
     }
 
     const removeItem = (index: number) => {
@@ -219,6 +234,18 @@ export function ItemsOrderedInput({
             onFavoriteChange(null)
         }
         onChange(value.filter((_, i) => i !== index))
+    }
+
+    const duplicateItem = (index: number) => {
+        const item = value[index]
+        const copy: ItemWithPreview = {
+            name: item.name,
+            price: item.price,
+            image_url: null,
+            categories: item.categories ?? (item.category ? [item.category] : null),
+            category: item.category ?? item.categories?.[0] ?? null,
+        }
+        onChange([...value.slice(0, index + 1), copy, ...value.slice(index + 1)])
     }
 
     const updateItemName = (index: number, name: string) => {
@@ -327,12 +354,81 @@ export function ItemsOrderedInput({
         <div className="space-y-4">
             <Label className="text-sm">Items Ordered</Label>
 
+            {/* Bulk paste */}
+            <div className="space-y-2">
+                {!showBulkPaste ? (
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground h-8"
+                            onClick={() => setShowBulkPaste(true)}
+                        >
+                            <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
+                            Paste items (one per line)
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground h-8"
+                            onClick={async () => {
+                                try {
+                                    const text = await navigator.clipboard.readText()
+                                    const parsed = parseBulkLines(text)
+                                    if (parsed.length === 0) {
+                                        toast.error("No valid lines to add. Use one item per line, e.g. \"Dish name – 5.00\"")
+                                        return
+                                    }
+                                    const newItems: ItemWithPreview[] = parsed.map(({ name, price }) => ({
+                                        name,
+                                        price,
+                                        image_url: null,
+                                        categories: null,
+                                        category: null,
+                                    }))
+                                    onChange([...value, ...newItems])
+                                    setBulkPasteText("")
+                                    toast.success(`Added ${parsed.length} item${parsed.length === 1 ? "" : "s"}`)
+                                } catch {
+                                    toast.error("Could not read clipboard")
+                                }
+                            }}
+                        >
+                            <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
+                            Paste from clipboard
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-2 p-3 border rounded-md bg-muted/10">
+                        <Label className="text-xs text-muted-foreground">Paste items (one per line, e.g. &quot;Dish name – 5.00&quot;)</Label>
+                        <Textarea
+                            value={bulkPasteText}
+                            onChange={(e) => setBulkPasteText(e.target.value)}
+                            placeholder={"Pho – 5.00\nSpring rolls – 3.50\nIced tea"}
+                            rows={3}
+                            className="text-sm resize-none"
+                        />
+                        <div className="flex gap-2">
+                            <Button type="button" variant="secondary" size="sm" onClick={addFromBulkPaste} disabled={!bulkPasteText.trim()}>
+                                Add from paste
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => { setShowBulkPaste(false); setBulkPasteText("") }}>
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             {/* Add new item */}
             <div className="flex flex-col gap-2 p-3 border rounded-md bg-muted/20">
                 <span className="text-xs font-medium text-muted-foreground">Add New Item</span>
                 <div className="flex gap-2 items-start">
                     <div className="flex-1 space-y-2">
                         <Input
+                            ref={nameInputRef}
                             value={newItemName}
                             onChange={(e) => setNewItemName(e.target.value)}
                             placeholder="Item name..."
@@ -477,6 +573,14 @@ export function ItemsOrderedInput({
                                         title="Set as favorite"
                                     >
                                         <Star className={cn("h-4 w-4", favoriteItem === item.name && "fill-current")} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => duplicateItem(index)}
+                                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                                        title="Duplicate item"
+                                    >
+                                        <Copy className="h-4 w-4" />
                                     </button>
                                     <button
                                         type="button"

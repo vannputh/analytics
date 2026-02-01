@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { FoodEntry, FoodEntryInsert, FoodEntryUpdate, ItemOrdered } from "@/lib/database.types"
-import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
+import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getFoodEntry, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
 import { PRICE_LEVELS, FOOD_TAGS, formatDualCurrency, USD_TO_KHR_RATE } from "@/lib/food-types"
 import {
     Dialog,
@@ -66,6 +66,8 @@ import { RatingInput, CuisineSelector, MultiSelectInput, PlaceImageUpload, Items
 
 interface FoodAddDialogProps {
     entry?: FoodEntry | null
+    /** When set (and entry is null), form is initialized from this entry as a new visit (e.g. "Log again"); visit date defaults to initialDate or today. */
+    template?: FoodEntry | null
     open: boolean
     onOpenChange: (open: boolean) => void
     onSuccess: (entry: FoodEntry) => void
@@ -75,6 +77,7 @@ interface FoodAddDialogProps {
 
 export function FoodAddDialog({
     entry,
+    template,
     open,
     onOpenChange,
     onSuccess,
@@ -114,6 +117,9 @@ export function FoodAddDialog({
     const [notes, setNotes] = useState("")
     const [placeImages, setPlaceImages] = useState<{ file?: File; preview: string; is_primary: boolean }[]>([])
     const sidebarFileInputRef = useRef<HTMLInputElement>(null)
+    const nameInputRef = useRef<HTMLInputElement>(null)
+    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+    const baselineRef = useRef<string | null>(null)
 
     const handlePlaceFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files
@@ -175,7 +181,7 @@ export function FoodAddDialog({
     const itemsTotal = itemsOrdered.reduce((sum, item) => sum + (item.price || 0), 0)
     const displayTotal = totalPrice ? parseFloat(totalPrice) : itemsTotal
 
-    // Initialize form from entry or defaults
+    // Initialize form from entry, template (duplicate), or defaults
     useEffect(() => {
         if (entry) {
             setName(entry.name)
@@ -210,6 +216,56 @@ export function FoodAddDialog({
                 preview: img.image_url,
                 is_primary: img.is_primary
             })) || [])
+            baselineRef.current = JSON.stringify({
+                name: entry.name, visitDate: entry.visit_date, category: entry.category || "", address: entry.address || "", googleMapsUrl: entry.google_maps_url || "",
+                neighborhood: entry.neighborhood || "", city: entry.city || "", country: entry.country || "", instagramHandle: entry.instagram_handle || "", websiteUrl: entry.website_url || "",
+                cuisineTypes: (entry.cuisine_type || []).slice().sort(), tags: (entry.tags || []).slice().sort(),
+                items: (entry.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: entry.favorite_item || "",
+                overallRating: entry.overall_rating, foodRating: entry.food_rating, ambianceRating: entry.ambiance_rating, serviceRating: entry.service_rating, valueRating: entry.value_rating,
+                totalPrice: entry.total_price?.toString() || "", priceLevel: entry.price_level || "", notes: entry.notes || "", placeImagesCount: entry.images?.length ?? 0
+            })
+        } else if (template) {
+            // Duplicate: same place, new visit (visit date = initialDate or today)
+            setName(template.name)
+            setVisitDate(initialDate ? new Date(initialDate) : new Date())
+            setCategory(template.category || "")
+            setAddress(template.address || "")
+            setGoogleMapsUrl(template.google_maps_url || "")
+            setNeighborhood(template.neighborhood || "")
+            setCity(template.city || "")
+            setCountry(template.country || "Cambodia")
+            setInstagramHandle(template.instagram_handle || "")
+            setWebsiteUrl(template.website_url || "")
+            setCuisineTypes(template.cuisine_type || [])
+            setTags(template.tags || [])
+            setItemsOrdered(
+                (template.items_ordered || []).map(item => ({
+                    ...item,
+                    preview: item.image_url || undefined
+                }))
+            )
+            setFavoriteItem(template.favorite_item || null)
+            setOverallRating(template.overall_rating)
+            setFoodRating(template.food_rating)
+            setAmbianceRating(template.ambiance_rating)
+            setServiceRating(template.service_rating)
+            setValueRating(template.value_rating)
+            setTotalPrice(template.total_price?.toString() || "")
+            setPriceLevel(template.price_level || "")
+            setNotes(template.notes || "")
+            setPlaceImages(template.images?.map(img => ({
+                preview: img.image_url,
+                is_primary: img.is_primary
+            })) || [])
+            const templateVisitDate = initialDate ? new Date(initialDate) : new Date()
+            baselineRef.current = JSON.stringify({
+                name: template.name, visitDate: format(templateVisitDate, "yyyy-MM-dd"), category: template.category || "", address: template.address || "", googleMapsUrl: template.google_maps_url || "",
+                neighborhood: template.neighborhood || "", city: template.city || "", country: template.country || "", instagramHandle: template.instagram_handle || "", websiteUrl: template.website_url || "",
+                cuisineTypes: (template.cuisine_type || []).slice().sort(), tags: (template.tags || []).slice().sort(),
+                items: (template.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: template.favorite_item || "",
+                overallRating: template.overall_rating, foodRating: template.food_rating, ambianceRating: template.ambiance_rating, serviceRating: template.service_rating, valueRating: template.value_rating,
+                totalPrice: template.total_price?.toString() || "", priceLevel: template.price_level || "", notes: template.notes || "", placeImagesCount: template.images?.length ?? 0
+            })
         } else {
             // Reset for new entry
             setName("")
@@ -235,8 +291,90 @@ export function FoodAddDialog({
             setPriceLevel("")
             setNotes("")
             setPlaceImages([])
+            const defaultVisit = initialDate ? new Date(initialDate) : new Date()
+            baselineRef.current = JSON.stringify({
+                name: "", visitDate: format(defaultVisit, "yyyy-MM-dd"), category: "", address: "", googleMapsUrl: "", neighborhood: "", city: "", country: "Cambodia", instagramHandle: "", websiteUrl: "",
+                cuisineTypes: [], tags: [], items: [], favoriteItem: "", overallRating: null, foodRating: null, ambianceRating: null, serviceRating: null, valueRating: null,
+                totalPrice: "", priceLevel: "", notes: "", placeImagesCount: 0
+            })
         }
-    }, [entry, initialDate, open])
+    }, [entry, template, initialDate, open])
+
+    // When opening edit with an entry that has no images (e.g. from calendar), fetch full entry so place images load
+    useEffect(() => {
+        if (!open || !entry?.id) return
+        const hasImages = entry.images && entry.images.length > 0
+        if (hasImages) return
+
+        let cancelled = false
+        getFoodEntry(entry.id).then((result) => {
+            if (cancelled || !result.success) return
+            const fullEntry = result.data as { images?: { image_url: string; is_primary: boolean }[] }
+            if (fullEntry.images && fullEntry.images.length > 0) {
+                setPlaceImages(
+                    fullEntry.images.map((img) => ({
+                        preview: img.image_url,
+                        is_primary: img.is_primary,
+                    }))
+                )
+            }
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [open, entry?.id, entry?.images?.length])
+
+    useEffect(() => {
+        if (!open) baselineRef.current = null
+    }, [open])
+
+    // Focus first field when opening for new entry
+    useEffect(() => {
+        if (!open || entry) return
+        const t = setTimeout(() => nameInputRef.current?.focus(), 100)
+        return () => clearTimeout(t)
+    }, [open, entry])
+
+    const getCurrentSnapshot = () =>
+        JSON.stringify({
+            name: name,
+            visitDate: visitDate && isValid(visitDate) ? format(visitDate, "yyyy-MM-dd") : "",
+            category: category,
+            address: address,
+            googleMapsUrl: googleMapsUrl,
+            neighborhood: neighborhood,
+            city: city,
+            country: country,
+            instagramHandle: instagramHandle,
+            websiteUrl: websiteUrl,
+            cuisineTypes: [...cuisineTypes].sort(),
+            tags: [...tags].sort(),
+            items: itemsOrdered.map(i => ({ name: i.name, price: i.price })),
+            favoriteItem: favoriteItem || "",
+            overallRating: overallRating,
+            foodRating: foodRating,
+            ambianceRating: ambianceRating,
+            serviceRating: serviceRating,
+            valueRating: valueRating,
+            totalPrice: totalPrice,
+            priceLevel: priceLevel,
+            notes: notes,
+            placeImagesCount: placeImages.length,
+        })
+    const isDirty = baselineRef.current !== null && getCurrentSnapshot() !== baselineRef.current
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen && isDirty) {
+            setShowDiscardConfirm(true)
+            return
+        }
+        onOpenChange(nextOpen)
+    }
+
+    const handleConfirmDiscard = () => {
+        setShowDiscardConfirm(false)
+        onOpenChange(false)
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -368,8 +506,12 @@ export function FoodAddDialog({
         }
     }
 
-    const handleAutofill = async () => {
-        if (!googleMapsUrl) {
+    const isMapsUrl = (s: string) =>
+        /google\.com\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(s?.trim() ?? "")
+
+    const handleAutofill = async (urlOverride?: string) => {
+        const urlToUse = urlOverride ?? googleMapsUrl
+        if (!urlToUse?.trim()) {
             toast.error("Please enter a Google Maps URL first")
             return
         }
@@ -379,7 +521,7 @@ export function FoodAddDialog({
             const response = await fetch("/api/maps/place-details", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: googleMapsUrl }),
+                body: JSON.stringify({ url: urlToUse.trim() }),
             })
 
             const data = await response.json()
@@ -394,7 +536,6 @@ export function FoodAddDialog({
             if (data.neighborhood) setNeighborhood(data.neighborhood)
             if (data.city) setCity(data.city)
             if (data.country) setCountry(data.country)
-            if (data.rating) setOverallRating(data.rating)
             if (data.priceLevel) setPriceLevel(data.priceLevel)
 
             // Add photos from Google Places to placeImages
@@ -418,7 +559,8 @@ export function FoodAddDialog({
     const tabs = ["general", "location", "items", "ratings", "notes"] as const
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
                 {/* Mobile Header */}
                 <div className="md:hidden border-b bg-muted/30 p-3">
@@ -464,6 +606,34 @@ export function FoodAddDialog({
                                 {tab}
                             </Button>
                         ))}
+                    </div>
+                    {/* Quick: Paste Maps URL (mobile, any tab) */}
+                    <div className="flex gap-1.5 mt-3">
+                        <Input
+                            value={googleMapsUrl}
+                            onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                            onPaste={(e) => {
+                                const pasted = e.clipboardData.getData("text")?.trim()
+                                if (pasted && isMapsUrl(pasted)) {
+                                    e.preventDefault()
+                                    setGoogleMapsUrl(pasted)
+                                    handleAutofill(pasted)
+                                }
+                            }}
+                            placeholder="Paste Maps link to fill…"
+                            type="url"
+                            className="h-8 text-xs flex-1 min-w-0"
+                        />
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 shrink-0 px-2"
+                            onClick={() => handleAutofill()}
+                            disabled={!googleMapsUrl?.trim() || isAutofilling}
+                        >
+                            {isAutofilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fill"}
+                        </Button>
                     </div>
                 </div>
 
@@ -527,6 +697,38 @@ export function FoodAddDialog({
                             </p>
                         )}
 
+                        {/* Quick: Paste Maps URL — hidden on desktop; use inline URL in main content */}
+                        <div className="space-y-1.5 w-full hidden">
+                            <p className="text-xs font-medium text-muted-foreground">Paste Maps URL</p>
+                            <div className="flex gap-1.5">
+                                <Input
+                                    value={googleMapsUrl}
+                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                                    onPaste={(e) => {
+                                        const pasted = e.clipboardData.getData("text")?.trim()
+                                        if (pasted && isMapsUrl(pasted)) {
+                                            e.preventDefault()
+                                            setGoogleMapsUrl(pasted)
+                                            handleAutofill(pasted)
+                                        }
+                                    }}
+                                    placeholder="Maps link…"
+                                    type="url"
+                                    className="h-8 text-xs flex-1 min-w-0"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-8 shrink-0 px-2"
+                                    onClick={() => handleAutofill()}
+                                    disabled={!googleMapsUrl?.trim() || isAutofilling}
+                                >
+                                    {isAutofilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fill"}
+                                </Button>
+                            </div>
+                        </div>
+
                         {/* Navigation Tabs (Vertical) */}
                         <div className="flex flex-col gap-1 w-full flex-1">
                             {tabs.map(tab => (
@@ -556,15 +758,50 @@ export function FoodAddDialog({
                         </DialogHeader>
 
                         <ScrollArea className="flex-1">
-                            <form onSubmit={handleSubmit} className="p-4 md:p-6">
+                            <form
+                                onSubmit={handleSubmit}
+                                className="p-4 md:p-6"
+                                onKeyDown={(e) => {
+                                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                                        e.preventDefault()
+                                        handleSubmit(e)
+                                    }
+                                }}
+                            >
                                 {/* GENERAL TAB */}
                                 {activeTab === "general" && (
                                     <div className="space-y-6">
-                                        {/* Place Photos */}
+                                        {/* Place Photos (Upload / Take Photo + autofill input inline) */}
                                         <PlaceImageUpload
                                             images={placeImages}
                                             onImagesChange={setPlaceImages}
                                             onFileSelect={handlePlaceFileSelect}
+                                            trailing={
+                                                <div className="hidden md:flex items-center gap-2 flex-1 min-w-[180px]">
+                                                    <Input
+                                                        id="generalGoogleMapsUrl"
+                                                        value={googleMapsUrl}
+                                                        onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                                                        onPaste={(e) => {
+                                                            const pasted = e.clipboardData.getData("text")?.trim()
+                                                            if (pasted && isMapsUrl(pasted)) {
+                                                                e.preventDefault()
+                                                                setGoogleMapsUrl(pasted)
+                                                                handleAutofill(pasted)
+                                                            }
+                                                        }}
+                                                        placeholder="Paste Google Maps link to auto-fill"
+                                                        type="url"
+                                                        className="h-9 flex-1 min-w-0 text-sm placeholder:text-muted-foreground/70 border-dashed"
+                                                    />
+                                                    {isAutofilling && (
+                                                        <span className="text-xs text-muted-foreground flex items-center gap-1.5 shrink-0">
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                            Filling…
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            }
                                         />
 
                                         <Separator />
@@ -574,6 +811,7 @@ export function FoodAddDialog({
                                             <div className="space-y-2 col-span-full">
                                                 <Label htmlFor="name">Restaurant / Place Name <span className="text-red-500">*</span></Label>
                                                 <Input
+                                                    ref={nameInputRef}
                                                     id="name"
                                                     value={name}
                                                     onChange={(e) => setName(e.target.value)}
@@ -640,32 +878,16 @@ export function FoodAddDialog({
                                 {activeTab === "location" && (
                                     <div className="space-y-4">
                                         <div className="space-y-2">
-                                            <Label htmlFor="googleMapsUrl">Google Maps URL</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    id="googleMapsUrl"
-                                                    value={googleMapsUrl}
-                                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                                                    placeholder="https://maps.google.com/..."
-                                                    type="url"
-                                                    className="flex-1"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={handleAutofill}
-                                                    disabled={isAutofilling || !googleMapsUrl}
-                                                >
-                                                    {isAutofilling ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                    ) : (
-                                                        "Auto-fill"
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            <Label htmlFor="locationGoogleMapsUrl">Google Maps URL</Label>
+                                            <Input
+                                                id="locationGoogleMapsUrl"
+                                                value={googleMapsUrl}
+                                                onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                                                placeholder="https://maps.google.com/..."
+                                                type="url"
+                                                className="w-full"
+                                            />
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label htmlFor="neighborhood">Neighborhood</Label>
@@ -826,7 +1048,7 @@ export function FoodAddDialog({
 
                         {/* Footer */}
                         <div className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
-                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                                 Cancel
                             </Button>
                             <Button onClick={handleSubmit} disabled={isSubmitting}>
@@ -856,6 +1078,27 @@ export function FoodAddDialog({
                 />
             </DialogContent>
         </Dialog>
+
+        {/* Discard changes confirmation */}
+        <Dialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Discard changes?</DialogTitle>
+                    <DialogDescription>
+                        You have unsaved changes. Are you sure you want to close? Your changes will be lost.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setShowDiscardConfirm(false)}>
+                        Cancel
+                    </Button>
+                    <Button type="button" variant="destructive" onClick={handleConfirmDiscard}>
+                        Discard
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+        </>
     )
 }
 

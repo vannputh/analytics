@@ -38,6 +38,8 @@ interface FoodDetailsDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     onEdit: (entry: FoodEntry) => void
+    /** Open add dialog with this entry as template (same place, new visit / "Log again"). */
+    onDuplicate?: (entry: FoodEntry) => void
     onDelete: (id: string) => void
 }
 
@@ -72,9 +74,11 @@ export function FoodDetailsDialog({
     open,
     onOpenChange,
     onEdit,
+    onDuplicate,
     onDelete,
 }: FoodDetailsDialogProps) {
     const [isDeleting, setIsDeleting] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [fullEntry, setFullEntry] = useState<(FoodEntry & { images: FoodEntryImage[] }) | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<"overview" | "details" | "notes">("overview")
@@ -107,15 +111,18 @@ export function FoodDetailsDialog({
 
     if (!entry) return null
 
-    const handleDelete = async () => {
-        if (!confirm("Are you sure you want to delete this entry?")) return
+    const handleDeleteClick = () => {
+        setShowDeleteConfirm(true)
+    }
 
+    const handleDeleteConfirm = async () => {
         setIsDeleting(true)
         try {
             const result = await deleteFoodEntry(entry.id)
             if (result.success) {
                 toast.success("Entry deleted")
                 onDelete(entry.id)
+                setShowDeleteConfirm(false)
                 onOpenChange(false)
             } else {
                 toast.error(result.error || "Failed to delete entry")
@@ -134,6 +141,13 @@ export function FoodDetailsDialog({
         }
     }
 
+    const copyMapsUrl = () => {
+        if (entry.google_maps_url) {
+            navigator.clipboard.writeText(entry.google_maps_url)
+            toast.success("Link copied")
+        }
+    }
+
     // Calculate total from items if available
     const itemsTotal = entry.items_ordered && Array.isArray(entry.items_ordered)
         ? entry.items_ordered.reduce((sum, item) => sum + (item.price || 0), 0)
@@ -143,6 +157,7 @@ export function FoodDetailsDialog({
     const hasImages = images.length > 0 || entry.primary_image_url
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
                 <ScrollArea className="flex-1">
@@ -304,14 +319,19 @@ export function FoodDetailsDialog({
                                     )}
 
                                     {/* External Links */}
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-2 items-center">
                                         {entry.google_maps_url && (
-                                            <Button variant="outline" size="sm" asChild>
-                                                <a href={entry.google_maps_url} target="_blank" rel="noopener noreferrer">
-                                                    <MapPin className="h-4 w-4 mr-2" />
-                                                    Google Maps
-                                                </a>
-                                            </Button>
+                                            <>
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <a href={entry.google_maps_url} target="_blank" rel="noopener noreferrer">
+                                                        <MapPin className="h-4 w-4 mr-2" />
+                                                        Google Maps
+                                                    </a>
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyMapsUrl} title="Copy link">
+                                                    <Copy className="h-4 w-4" />
+                                                </Button>
+                                            </>
                                         )}
                                         {entry.instagram_handle && (
                                             <Button variant="outline" size="sm" asChild>
@@ -409,12 +429,12 @@ export function FoodDetailsDialog({
                 </ScrollArea>
 
                 {/* Footer */}
-                <DialogFooter className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
+                <DialogFooter className="border-t p-4 flex flex-wrap items-center justify-between gap-2 bg-muted/20 shrink-0 w-full z-10">
                     <Button
                         type="button"
                         variant="outline"
                         className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
-                        onClick={handleDelete}
+                        onClick={handleDeleteClick}
                         disabled={isDeleting}
                     >
                         {isDeleting ? (
@@ -424,16 +444,68 @@ export function FoodDetailsDialog({
                         )}
                         Delete
                     </Button>
+                    <div className="flex gap-2">
+                        {onDuplicate && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    onDuplicate(entry)
+                                    onOpenChange(false)
+                                }}
+                            >
+                                Log again
+                            </Button>
+                        )}
+                        <Button
+                            variant="default"
+                            onClick={() => onEdit(entry)}
+                        >
+                            <Edit2 className="h-4 w-4 mr-2" />
+                            Edit
+                        </Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* Delete confirmation dialog */}
+        <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Delete entry?</DialogTitle>
+                    <DialogDescription>
+                        This will permanently remove &quot;{entry.name}&quot; from your food log. This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2 sm:gap-0">
                     <Button
-                        variant="default"
-                        onClick={() => onEdit(entry)}
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={isDeleting}
                     >
-                        <Edit2 className="h-4 w-4 mr-2" />
-                        Edit
+                        Cancel
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleDeleteConfirm}
+                        disabled={isDeleting}
+                    >
+                        {isDeleting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Deleting...
+                            </>
+                        ) : (
+                            "Delete"
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    </>
     )
 }
 

@@ -13,6 +13,8 @@ interface CalendarDayCellProps {
     entries: FoodEntry[];
     loading: boolean;
     onClick: () => void;
+    /** Double-click opens add-entry for this date. */
+    onAddForDate?: (date: string) => void;
 }
 
 export function CalendarDayCell({
@@ -24,6 +26,7 @@ export function CalendarDayCell({
     entries,
     loading,
     onClick,
+    onAddForDate,
 }: CalendarDayCellProps) {
     const hasEntries = entries.length > 0;
 
@@ -31,6 +34,10 @@ export function CalendarDayCell({
         <button
             type="button"
             onClick={onClick}
+            onDoubleClick={(e) => {
+                e.preventDefault()
+                onAddForDate?.(date)
+            }}
             className={cn(
                 "relative min-h-[60px] sm:min-h-[80px] p-1 sm:p-2 border-b border-r text-left transition-colors",
                 "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset",
@@ -57,7 +64,7 @@ export function CalendarDayCell({
                 </div>
             ) : hasEntries ? (
                 <div className="mt-1 space-y-0.5">
-                    {entries.slice(0, 2).map((entry) => (
+                    {entries.slice(0, 3).map((entry) => (
                         <div
                             key={entry.id}
                             className="flex items-center gap-1 text-[10px] sm:text-xs truncate"
@@ -69,9 +76,9 @@ export function CalendarDayCell({
                             <span className="truncate">{entry.name}</span>
                         </div>
                     ))}
-                    {entries.length > 2 && (
+                    {entries.length > 3 && (
                         <div className="text-[10px] text-muted-foreground">
-                            +{entries.length - 2} more
+                            +{entries.length - 3} more
                         </div>
                     )}
                 </div>
