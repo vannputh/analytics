@@ -210,9 +210,10 @@ export function MediaDetailsDialog({
                 // New entry - initialize with defaults
                 setFormData({
                     title: "",
-                    status: "Planned",
+                    status: "Watching",
                     medium: "Movie",
                     episodes_watched: 0,
+                    start_date: new Date().toISOString().split("T")[0],
                 });
                 setActiveTab("general");
                 setEpisodeHistory([]);
@@ -221,6 +222,13 @@ export function MediaDetailsDialog({
             }
         }
     }, [open, entry]);
+
+    // When finish_date is set, auto-set status to "Finished"
+    useEffect(() => {
+        if (formData.finish_date) {
+            setFormData(prev => ({ ...prev, status: "Finished" }));
+        }
+    }, [formData.finish_date]);
 
     // Load dropdown options
     useEffect(() => {

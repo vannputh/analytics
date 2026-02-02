@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, Suspense } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { MediaEntry } from "@/lib/database.types"
 import { defaultFilterState } from "@/lib/filter-types"
@@ -29,6 +29,7 @@ import { WatchingSection } from "@/components/movies/WatchingSection"
 
 function EntriesPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const {
     allEntries,
@@ -57,6 +58,14 @@ function EntriesPageContent() {
   const [entriesCollapsed, setEntriesCollapsed] = useState(false)
   const { visibleColumns, setVisibleColumns, toggleColumn } = useColumnPreferences()
 
+  // Refetch and clear URL when landing after add (redirect with ?refreshed=1)
+  useEffect(() => {
+    if (searchParams.get("refreshed") === "1") {
+      refreshEntries()
+      router.replace("/movies")
+    }
+  }, [searchParams, router, refreshEntries])
+
   const handleEdit = (entry: MediaEntry) => {
     // Preserve current URL with all filters and search params
     const currentUrl = window.location.pathname + window.location.search
@@ -68,7 +77,7 @@ function EntriesPageContent() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-background relative page-content">
-        <PageHeader title="All Entries" />
+        <PageHeader title="All Entries" onMediaAdded={refreshEntries} />
         <main className="p-4 sm:p-6 relative">
           <div className="mb-6 space-y-4">
             <div className="flex items-center gap-2">
@@ -106,7 +115,7 @@ function EntriesPageContent() {
       )}
 
       {/* Header */}
-      <PageHeader title="All Entries" />
+      <PageHeader title="All Entries" onMediaAdded={refreshEntries} />
 
       {/* Global Filter Bar */}
       {allEntries.length > 0 && (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { differenceInDays } from "date-fns/differenceInDays"
@@ -190,6 +190,26 @@ export function useMediaForm(entryId?: string | null) {
         }
     }, [entryId, router])
 
+    // Default start_date to today when creating (run once on mount for create mode)
+    const hasSetCreateDefaults = useRef(false)
+    useEffect(() => {
+        if (!entryId && !fetching && !hasSetCreateDefaults.current) {
+            hasSetCreateDefaults.current = true
+            setFormData((prev) =>
+                prev.start_date == null
+                    ? { ...prev, start_date: new Date().toISOString().split("T")[0] }
+                    : prev
+            )
+        }
+    }, [entryId, fetching])
+
+    // When finish_date is set, auto-set status to "Finished"
+    useEffect(() => {
+        if (formData.finish_date) {
+            setFormData((prev) => ({ ...prev, status: "Finished" }))
+        }
+    }, [formData.finish_date])
+
     // Auto-calculate time_taken
     useEffect(() => {
         if (formData.start_date && formData.finish_date) {
@@ -318,7 +338,7 @@ export function useMediaForm(entryId?: string | null) {
                 const result = await createEntry(entryData)
                 if (result.success) {
                     toast.success("Entry created successfully")
-                    router.push("/movies/analytics")
+                    router.push("/movies?refreshed=1")
                 } else {
                     toast.error(result.error || "Failed to create entry")
                 }

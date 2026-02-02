@@ -42,9 +42,11 @@ interface PageHeaderProps {
   title: string
   /** When on food workspace, opening Add uses this instead of the header's own dialog (single dialog, can receive calendar date). */
   openFoodAddDialog?: (initialDate?: string) => void
+  /** Called when media is created/updated via the header dialog (e.g. so list page can refresh entries). */
+  onMediaAdded?: () => void
 }
 
-export function PageHeader({ title, openFoodAddDialog }: PageHeaderProps) {
+export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [showBookDialog, setShowBookDialog] = useState(false)
@@ -187,6 +189,7 @@ export function PageHeader({ title, openFoodAddDialog }: PageHeaderProps) {
         onSuccess={() => {
           setShowMediaDialog(false)
           router.refresh()
+          onMediaAdded?.()
         }}
       />
       <BookDetailsDialog

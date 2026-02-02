@@ -34,6 +34,9 @@ export function DatesSection({ formData, setFormData }: DatesSectionProps) {
                     value={formData.finish_date || ""}
                     onChange={(e) => setFormData({ ...formData, finish_date: e.target.value || null })}
                 />
+                <p className="text-xs text-muted-foreground">
+                    Setting a finish date will set status to Finished.
+                </p>
             </div>
 
             <div className="space-y-2">
