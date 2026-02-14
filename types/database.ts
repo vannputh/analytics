@@ -43,7 +43,7 @@ export type MediaEntry = {
   updated_at: string
 }
 
-export type Medium = 'Movie' | 'TV Show' | 'Book' | 'Theatre' | 'Live Theatre' | 'Podcast'
+export type Medium = 'Movie' | 'TV Show' | 'Theatre' | 'Live Theatre' | 'Podcast'
 
 export type Platform =
   | 'Netflix'

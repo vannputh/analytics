@@ -24,7 +24,6 @@ interface MediaDetailsSectionProps {
     setShowNewInput: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
     newValue: Record<string, string>
     setNewValue: React.Dispatch<React.SetStateAction<Record<string, string>>>
-    detectISBN: (val: string) => string | null
 }
 
 export function MediaDetailsSection({
@@ -35,8 +34,7 @@ export function MediaDetailsSection({
     showNewInput,
     setShowNewInput,
     newValue,
-    setNewValue,
-    detectISBN
+    setNewValue
 }: MediaDetailsSectionProps) {
 
     const handleNewInputBlur = (field: "platform", pluralField: "platforms") => {
@@ -157,22 +155,12 @@ export function MediaDetailsSection({
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="imdb_id" className="text-sm font-mono">IMDb ID / ISBN</Label>
+                    <Label htmlFor="imdb_id" className="text-sm font-mono">IMDb ID</Label>
                     <Input
                         id="imdb_id"
                         value={formData.imdb_id || ""}
-                        onChange={(e) => {
-                            const value = e.target.value
-                            const isbn = detectISBN(value)
-
-                            // Auto-set medium to "Book" if ISBN is detected
-                            if (isbn) {
-                                setFormData({ ...formData, imdb_id: value, medium: "Book" })
-                            } else {
-                                setFormData({ ...formData, imdb_id: value })
-                            }
-                        }}
-                        placeholder="tt1234567 or 9780123456789"
+                        onChange={(e) => setFormData({ ...formData, imdb_id: e.target.value })}
+                        placeholder="tt1234567"
                     />
                 </div>
             </div>

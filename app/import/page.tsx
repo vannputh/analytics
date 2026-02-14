@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { ParsedRow, transformCleanedData } from "@/lib/csv-parser"
-import { normalizeAllMediaLanguages, normalizeAllBookLanguages } from "@/lib/actions"
+import { normalizeAllMediaLanguages } from "@/lib/actions"
 
 // Import modular components
 import { ImportFileUpload } from "@/components/import/ImportFileUpload"
@@ -277,10 +277,8 @@ export default function ImportPage() {
           // Build URL with title and season if provided
           let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`
 
-          // Pass medium parameter for books (Google Books API)
-          if (entry.medium === "Book") {
-            url += `&medium=${encodeURIComponent(entry.medium)}`
-          } else if (entry.medium) {
+          // Pass medium parameter for movies and TV shows
+          if (entry.medium) {
             // Map medium values to OMDB type for movies and TV shows
             const typeMap: Record<string, string> = {
               "Movie": "movie",
@@ -367,24 +365,18 @@ export default function ImportPage() {
   async function handleNormalizeLanguages() {
     setNormalizing(true)
     try {
-      const [mediaRes, bookRes] = await Promise.all([
-        normalizeAllMediaLanguages(),
-        normalizeAllBookLanguages(),
-      ])
+      const mediaRes = await normalizeAllMediaLanguages()
       const mediaUpdated = mediaRes.success ? mediaRes.data.updated : 0
-      const bookUpdated = bookRes.success ? bookRes.data.updated : 0
       const mediaErrors = mediaRes.success ? mediaRes.data.errors : []
-      const bookErrors = bookRes.success ? bookRes.data.errors : []
-      if (mediaErrors.length > 0 || bookErrors.length > 0) {
-        const errMsg = [...mediaErrors, ...bookErrors].slice(0, 3).join("; ")
-        toast.warning(`Updated ${mediaUpdated} media, ${bookUpdated} books. Some errors: ${errMsg}`)
-      } else if (mediaUpdated > 0 || bookUpdated > 0) {
-        toast.success(`Normalized languages: ${mediaUpdated} media entries, ${bookUpdated} book entries`)
+      if (mediaErrors.length > 0) {
+        const errMsg = mediaErrors.slice(0, 3).join("; ")
+        toast.warning(`Updated ${mediaUpdated} media entries. Some errors: ${errMsg}`)
+      } else if (mediaUpdated > 0) {
+        toast.success(`Normalized languages: ${mediaUpdated} media entries`)
       } else {
         toast.info("All language values are already normalized")
       }
       if (!mediaRes.success) toast.error(mediaRes.error)
-      if (!bookRes.success) toast.error(bookRes.error)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to normalize languages")
     } finally {

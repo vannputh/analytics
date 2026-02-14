@@ -13,7 +13,6 @@ interface BasicDetailsSectionProps {
     fetchingMetadata: boolean
     fetchingSource: "omdb" | "tmdb" | null
     imdbId: string | null
-    detectISBN: (val: string) => string | null
     detectIMDbID: (val: string) => boolean
     autoFocus?: boolean
 }
@@ -25,11 +24,10 @@ export function BasicDetailsSection({
     fetchingMetadata,
     fetchingSource,
     imdbId,
-    detectISBN,
     detectIMDbID,
     autoFocus,
 }: BasicDetailsSectionProps) {
-    const hasValidIdentifier = (title?.trim() || detectISBN(imdbId || "") || detectIMDbID(imdbId || ""))
+    const hasValidIdentifier = (title?.trim() || detectIMDbID(imdbId || ""))
 
     return (
         <div className="space-y-2">

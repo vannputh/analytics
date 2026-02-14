@@ -17,14 +17,6 @@ import {
   mapOMDBType,
   OMDBResponse
 } from "@/lib/services/omdb";
-import {
-  searchBookByISBN,
-  searchBookByTitle,
-  findBestBookMatch,
-  getBookCoverUrl,
-  extractISBN,
-  detectAndNormalizeISBN
-} from "@/lib/services/google-books";
 import { normalizeLanguageCode, normalizeLanguage } from "@/lib/language-utils";
 
 export async function GET(request: NextRequest) {
@@ -33,107 +25,19 @@ export async function GET(request: NextRequest) {
     const title = searchParams.get("title");
     const imdbIdParam = searchParams.get("imdb_id"); // For direct IMDb ID searches
     const type = searchParams.get("type"); // movie, series, episode
-    const medium = searchParams.get("medium"); // Movie, TV Show, Book, etc.
+    const medium = searchParams.get("medium"); // Movie, TV Show, etc.
     const year = searchParams.get("year");
     const season = searchParams.get("season"); // Season number (e.g., "1", "2")
     const source = searchParams.get("source"); // "omdb", "tmdb", or undefined (both)
 
-    // Check if imdb_id is provided (could be ISBN or IMDb ID)
-    const inputISBN = imdbIdParam ? detectAndNormalizeISBN(imdbIdParam) : null;
-    const isImdbId = imdbIdParam && !inputISBN && imdbIdParam.trim().startsWith("tt");
+    // Check if imdb_id is provided
+    const isImdbId = imdbIdParam && imdbIdParam.trim().startsWith("tt");
 
     if (!title && !imdbIdParam) {
       return NextResponse.json(
-        { error: "Title or IMDb ID/ISBN is required" },
+        { error: "Title or IMDb ID is required" },
         { status: 400 }
       );
-    }
-
-    // Check if input is an ISBN (auto-detect books by ISBN)
-    const normalizedTitle = title?.trim() || "";
-    const titleISBN = title ? detectAndNormalizeISBN(normalizedTitle) : null;
-    const finalISBN = inputISBN || titleISBN;
-    const isBook = medium === "Book" || finalISBN !== null;
-
-    // --- GOOGLE BOOKS FLOW ---
-    if (isBook) {
-      const googleApiKey = process.env.GOOGLE_BOOK_API_KEY;
-
-      if (!googleApiKey) {
-        return NextResponse.json(
-          {
-            error: "GOOGLE_BOOK_API_KEY not configured",
-            info: "Get a free API key from https://console.cloud.google.com/apis/credentials and add it to your .env file",
-          },
-          { status: 500 }
-        );
-      }
-
-      let bestMatch: any = null;
-
-      if (finalISBN) {
-        // Search by ISBN directly
-        bestMatch = await searchBookByISBN(finalISBN, googleApiKey);
-      } else {
-        // Search by title
-        if (!normalizedTitle) {
-          return NextResponse.json(
-            { error: "Title is required for book search" },
-            { status: 400 }
-          );
-        }
-
-        const items = await searchBookByTitle(normalizedTitle, googleApiKey, year || undefined);
-        if (items.length === 0) {
-          return NextResponse.json({ error: "Book not found" }, { status: 404 });
-        }
-
-        bestMatch = findBestBookMatch(normalizedTitle, items, year);
-      }
-
-      if (!bestMatch) {
-        return NextResponse.json({ error: "Book not found" }, { status: 404 });
-      }
-
-      const volumeInfo = bestMatch.volumeInfo;
-
-      // Extract year from publishedDate
-      let bookYear = year || null;
-      if (volumeInfo.publishedDate) {
-        const yearMatch = volumeInfo.publishedDate.match(/\d{4}/);
-        if (yearMatch) {
-          bookYear = yearMatch[0];
-        }
-      }
-
-      // Get average rating (convert 0-5 scale to 0-10)
-      let averageRating = null;
-      if (volumeInfo.averageRating !== undefined && volumeInfo.averageRating !== null) {
-        averageRating = parseFloat((volumeInfo.averageRating * 2).toFixed(1));
-      }
-
-      // Format genre
-      let genre = null;
-      if (volumeInfo.categories && volumeInfo.categories.length > 0) {
-        genre = volumeInfo.categories.map((cat: string) => cat.trim()).filter(Boolean);
-      }
-
-      const metadata = {
-        title: volumeInfo.title + (volumeInfo.subtitle ? `: ${volumeInfo.subtitle}` : ""),
-        poster_url: getBookCoverUrl(volumeInfo.imageLinks),
-        genre: genre,
-        language: volumeInfo.language ? (normalizeLanguageCode(volumeInfo.language) || null) : null,
-        average_rating: averageRating,
-        length: volumeInfo.pageCount ? `${volumeInfo.pageCount} pages` : null,
-        type: "Book",
-        episodes: null,
-        season: null,
-        year: bookYear,
-        plot: volumeInfo.description || null,
-        imdb_id: extractISBN(volumeInfo.industryIdentifiers), // Store ISBN in imdb_id field
-      };
-
-      return NextResponse.json(metadata);
     }
 
     // --- MOVIE / TV SHOW FLOW ---

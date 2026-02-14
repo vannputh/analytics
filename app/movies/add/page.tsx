@@ -22,7 +22,7 @@ function AddPageContent() {
   const entryId = searchParams.get("id")
   const returnTo = searchParams.get("returnTo")
 
-  const { fetchMetadata, fetching: fetchingMetadata, fetchingSource, detectISBN, detectIMDbID } = useMediaMetadata()
+  const { fetchMetadata, fetching: fetchingMetadata, fetchingSource, detectIMDbID } = useMediaMetadata()
 
   const {
     formData,
@@ -131,7 +131,6 @@ function AddPageContent() {
             fetchingMetadata={fetchingMetadata}
             fetchingSource={fetchingSource}
             imdbId={formData.imdb_id || null}
-            detectISBN={detectISBN}
             detectIMDbID={detectIMDbID}
             autoFocus={!entryId}
           />
@@ -160,7 +159,6 @@ function AddPageContent() {
             setShowNewInput={setShowNewInput as any}
             newValue={newValue}
             setNewValue={setNewValue as any}
-            detectISBN={detectISBN}
           />
 
           <RatingSection

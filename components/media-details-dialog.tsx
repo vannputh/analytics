@@ -31,7 +31,6 @@ import {
     Hash,
     Globe,
     PlayCircle,
-    BookOpen,
     Pencil,
     History,
     Trash2,
@@ -334,15 +333,7 @@ export function MediaDetailsDialog({
         }
     };
 
-    // Helper functions for detecting ISBN and IMDb ID
-    const detectISBN = (input: string | null | undefined): string | null => {
-        if (!input) return null;
-        const cleaned = input.replace(/[^0-9X]/g, '');
-        if (/^(978|979)\d{10}$/.test(cleaned)) return cleaned;
-        if (/^\d{9}[\dX]$/.test(cleaned)) return cleaned;
-        return null;
-    };
-
+    // Helper to detect IMDb ID
     const detectIMDbID = (input: string | null | undefined): boolean => {
         if (!input) return false;
         const trimmed = input.trim();
@@ -350,12 +341,11 @@ export function MediaDetailsDialog({
     };
 
     const handleFetchMetadata = async (source: "omdb" | "tmdb") => {
-        const isbn = detectISBN(formData.imdb_id);
         const isImdbId = detectIMDbID(formData.imdb_id);
         const hasTitle = formData.title?.trim();
 
-        if (!hasTitle && !isbn && !isImdbId) {
-            toast.error("Please enter a title, ISBN, or IMDb ID first");
+        if (!hasTitle && !isImdbId) {
+            toast.error("Please enter a title or IMDb ID first");
             return;
         }
 
@@ -365,7 +355,7 @@ export function MediaDetailsDialog({
         try {
             let url = "";
 
-            if (isbn || isImdbId) {
+            if (isImdbId) {
                 url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`;
                 if (hasTitle && formData.title) {
                     url += `&title=${encodeURIComponent(formData.title.trim())}`;
@@ -375,20 +365,14 @@ export function MediaDetailsDialog({
             }
 
             if (formData.medium) {
-                if (formData.medium === "Book") {
-                    url += `&medium=${encodeURIComponent(formData.medium)}`;
-                } else {
-                    const typeMap: Record<string, string> = {
-                        "Movie": "movie",
-                        "TV Show": "series",
-                    };
-                    const omdbType = typeMap[formData.medium];
-                    if (omdbType) {
-                        url += `&type=${omdbType}`;
-                    }
+                const typeMap: Record<string, string> = {
+                    "Movie": "movie",
+                    "TV Show": "series",
+                };
+                const omdbType = typeMap[formData.medium];
+                if (omdbType) {
+                    url += `&type=${omdbType}`;
                 }
-            } else if (isbn) {
-                url += `&medium=Book`;
             }
 
             if (formData.season) {
@@ -791,11 +775,11 @@ export function MediaDetailsDialog({
 
                                         {/* IMDb ID */}
                                         <div className="space-y-2">
-                                            <Label>IMDb ID / ISBN</Label>
+                                            <Label>IMDb ID</Label>
                                             <Input
                                                 value={formData.imdb_id || ""}
                                                 onChange={(e) => setFormData(p => ({ ...p, imdb_id: e.target.value }))}
-                                                placeholder="tt1234567 or ISBN"
+                                                placeholder="tt1234567"
                                             />
                                         </div>
 

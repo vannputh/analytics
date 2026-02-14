@@ -12,44 +12,9 @@ export interface EpisodeWatchRecord {
   watched_at: string;
 }
 
-export type BookEntry = {
-  id: string
-  title: string
-  author: string | null
-  publisher: string | null
-  isbn: string | null
-  pages: number | null
-  format: string | null
-  genre: string[] | null
-  language: string[] | null
-  series_name: string | null
-  series_number: number | null
-  status: string | null
-  platform: string | null
-  price: number | null
-  my_rating: number | null
-  average_rating: number | null
-  start_date: string | null
-  finish_date: string | null
-  notes: string | null
-  cover_url: string | null
-  goodreads_id: string | null
-  created_at: string
-  updated_at: string
-}
-
 export type Database = {
   public: {
     Tables: {
-      book_entries: {
-        Row: BookEntry
-        Insert: Omit<BookEntry, 'id' | 'created_at' | 'updated_at'> & {
-          id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Omit<BookEntry, 'id'>>
-      }
       media_entries: {
         Row: {
           average_rating: number | null
@@ -340,10 +305,6 @@ export type UserPreference = Tables<"user_preferences">
 export type UserPreferenceInsert = TablesInsert<"user_preferences">
 export type UserPreferenceUpdate = TablesUpdate<"user_preferences">
 
-// Book types
-export type BookEntryInsert = Database['public']['Tables']['book_entries']['Insert']
-export type BookEntryUpdate = Database['public']['Tables']['book_entries']['Update']
-
 // Item ordered with optional price, image, and category
 export type ItemOrdered = {
   name: string
@@ -416,7 +377,7 @@ export type FoodEntryImageInsert = Omit<FoodEntryImage, 'id' | 'created_at'> & {
 
 // Medium types for filtering
 export const VISUAL_MEDIA_TYPES = ["Movie", "TV Show", "Podcast", "Live Theatre"] as const
-export const TEXT_MEDIA_TYPES = [] as const // Books moved to separate table
+export const TEXT_MEDIA_TYPES = [] as const
 export const ALL_MEDIUM_TYPES = ["Movie", "TV Show", "Game", "Podcast", "Live Theatre"] as const
 
 export type VisualMediaType = (typeof VISUAL_MEDIA_TYPES)[number]

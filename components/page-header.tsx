@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/client"
-import { Table2, BarChart3, Plus, LogOut, Film, Book, Utensils, ChevronDown, Check, Calendar } from "lucide-react"
+import { Table2, BarChart3, Plus, LogOut, Film, Utensils, ChevronDown, Check, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import {
   DropdownMenu,
@@ -17,10 +17,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 // Dynamic imports for dialog components - reduces initial bundle size
-const BookDetailsDialog = dynamic(
-  () => import("@/components/book-details-dialog").then(m => m.BookDetailsDialog),
-  { ssr: false }
-)
 const MediaDetailsDialog = dynamic(
   () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
   { ssr: false }
@@ -32,7 +28,6 @@ const FoodAddDialog = dynamic(
 
 const WORKSPACES = {
   movies: { label: "Movies & TV", icon: Film, path: "/movies" },
-  books: { label: "Books", icon: Book, path: "/books" },
   food: { label: "Food & Drinks", icon: Utensils, path: "/food" },
 } as const
 
@@ -49,7 +44,6 @@ interface PageHeaderProps {
 export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const [showBookDialog, setShowBookDialog] = useState(false)
   const [showMediaDialog, setShowMediaDialog] = useState(false)
   const [showFoodDialog, setShowFoodDialog] = useState(false)
 
@@ -145,18 +139,6 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
             </Button>
           )}
 
-          {currentWorkspaceKey === "books" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowBookDialog(true)}
-              className="px-2 sm:px-3"
-            >
-              <Plus className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Add</span>
-            </Button>
-          )}
-
           {currentWorkspaceKey === "food" && (
             <Button
               variant="outline"
@@ -190,15 +172,6 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
           setShowMediaDialog(false)
           router.refresh()
           onMediaAdded?.()
-        }}
-      />
-      <BookDetailsDialog
-        open={showBookDialog}
-        onOpenChange={setShowBookDialog}
-        entry={null}
-        onSuccess={() => {
-          setShowBookDialog(false)
-          router.refresh()
         }}
       />
       {!(currentWorkspaceKey === "food" && openFoodAddDialog) && (
