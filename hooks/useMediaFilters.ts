@@ -34,7 +34,7 @@ function paramsToFilters(params: URLSearchParams): FilterState {
     }
 }
 
-export function useMovieFilters(allEntries: MediaEntry[]) {
+export function useMediaFilters(allEntries: MediaEntry[]) {
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -87,7 +87,7 @@ export function useMovieFilters(allEntries: MediaEntry[]) {
         // Only clean update the URL if something changed
         if (newQueryString !== currentQueryString) {
             isUpdatingFromState.current = true
-            const newUrl = newQueryString ? `/movies?${newQueryString}` : "/movies"
+            const newUrl = newQueryString ? `/media?${newQueryString}` : "/media"
             router.replace(newUrl, { scroll: false })
         }
     }, [filters, router, searchParams])
@@ -111,7 +111,7 @@ export function useMovieFilters(allEntries: MediaEntry[]) {
 
             if (newQueryString !== currentQueryString) {
                 isUpdatingFromState.current = true
-                const newUrl = newQueryString ? `/movies?${newQueryString}` : "/movies"
+                const newUrl = newQueryString ? `/media?${newQueryString}` : "/media"
                 router.replace(newUrl, { scroll: false })
             }
         }, 300) // 300ms debounce

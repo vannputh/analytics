@@ -63,18 +63,28 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/movies",
+        destination: "/media",
+        permanent: true,
+      },
+      {
+        source: "/movies/:path*",
+        destination: "/media/:path*",
+        permanent: true,
+      },
+      {
         source: "/entries",
-        destination: "/movies",
+        destination: "/media",
         permanent: true,
       },
       {
         source: "/library",
-        destination: "/movies",
+        destination: "/media",
         permanent: true,
       },
       {
         source: "/watching",
-        destination: "/movies/watching",
+        destination: "/media/watching",
         permanent: true,
       },
     ]

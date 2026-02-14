@@ -39,8 +39,9 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  const stored = localStorage.getItem('theme');
-                  const theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                  if (typeof localStorage === 'undefined') return;
+                  var stored = localStorage.getItem('theme');
+                  var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
                   document.documentElement.classList.toggle('dark', theme === 'dark');
                 } catch (e) {}
               })();

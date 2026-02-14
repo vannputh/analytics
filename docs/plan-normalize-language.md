@@ -59,6 +59,6 @@ Update every row in `media_entries` and `book_entries` so that the `language` co
 | **CSV** | Normalize in [lib/csv-utils.ts](lib/csv-utils.ts) and [lib/csv-parser.ts](lib/csv-parser.ts). |
 | **Batch** | Normalize in [hooks/useBatchMetadataFetch.ts](hooks/useBatchMetadataFetch.ts). |
 | **Books** | Normalize in [lib/book-types.ts](lib/book-types.ts) and [lib/book-actions.ts](lib/book-actions.ts); filter/options and create/update. |
-| **Existing data** | **New:** Server actions `normalizeAllMediaLanguages()` and `normalizeAllBookLanguages()` (or combined `normalizeAllLanguages()`), plus a **“Normalize languages”** button (e.g. on Import page) to run them and report how many rows were updated. |
+| **Existing data** | **New:** Server actions `normalizeAllMediaLanguages()` and `normalizeAllBookLanguages()` (or combined `normalizeAllLanguages()`), plus a **“Normalize languages”** button (e.g. on Analytics or Settings page) to run them and report how many rows were updated. |
 
 Once this is in place, **all** language values—new and existing—will be normalized to English.

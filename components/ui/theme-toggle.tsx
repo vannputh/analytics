@@ -19,7 +19,13 @@ export function ThemeToggle() {
     const newIsDark = !isDark
     setIsDark(newIsDark)
     document.documentElement.classList.toggle("dark", newIsDark)
-    localStorage.setItem("theme", newIsDark ? "dark" : "light")
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("theme", newIsDark ? "dark" : "light")
+      }
+    } catch {
+      // Storage not available (e.g. private mode, iframe, or restricted context)
+    }
   }
 
   // Render placeholder during SSR to avoid hydration mismatch

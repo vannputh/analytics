@@ -18,6 +18,7 @@ import {
   OMDBResponse
 } from "@/lib/services/omdb";
 import { normalizeLanguageCode, normalizeLanguage } from "@/lib/language-utils";
+import { classifyWithGemini } from "@/lib/services/ai-classifier";
 
 export async function GET(request: NextRequest) {
   try {
@@ -267,6 +268,82 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    // --- LOGIC-BASED AUTOFILL ---
+    
+    // 1. Determine content_type from genres
+    let needsAIClassification = false;
+    
+    if (metadata.genre) {
+      const genres = Array.isArray(metadata.genre) ? metadata.genre : metadata.genre.split(",").map((g: string) => g.trim());
+      const genresLower = genres.map((g: string) => g.toLowerCase());
+      
+      // Map genres to content type
+      if (genresLower.includes("documentary")) {
+        metadata.content_type = "Documentary";
+      } else if (genresLower.includes("animation") || genresLower.includes("anime")) {
+        metadata.content_type = "Animation";
+      } else if (genresLower.includes("reality") || genresLower.includes("game-show")) {
+        metadata.content_type = "Reality";
+      } else if (genresLower.includes("talk-show") || genresLower.includes("variety") || genresLower.includes("news")) {
+        metadata.content_type = "Variety";
+      } else {
+        metadata.content_type = "Scripted Live Action";
+      }
+    } else {
+      // No genres available, might need AI
+      needsAIClassification = true;
+    }
+
+    // 2. Gemini AI Fallback (if needed and available)
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (needsAIClassification && geminiApiKey && metadata.title) {
+      try {
+        const classification = await classifyWithGemini({
+          title: metadata.title,
+          plot: metadata.plot || undefined,
+          genres: Array.isArray(metadata.genre) ? metadata.genre : (metadata.genre ? [metadata.genre] : undefined),
+          year: metadata.year || undefined,
+          type: metadata.type || undefined,
+        }, geminiApiKey);
+
+        if (classification) {
+          if (classification.content_type && !metadata.content_type) {
+            metadata.content_type = classification.content_type;
+          }
+          if (classification.medium && !metadata.type) {
+            metadata.type = classification.medium;
+          }
+          if (classification.suggested_genres && (!metadata.genre || (Array.isArray(metadata.genre) && metadata.genre.length === 0))) {
+            metadata.genre = classification.suggested_genres;
+          }
+        }
+      } catch (error) {
+        console.error("AI classification failed, continuing without it:", error);
+        // Continue without AI classification, don't fail the request
+      }
+    }
+
+    // Fallback if still no content_type
+    if (!metadata.content_type) {
+      metadata.content_type = "Scripted Live Action";
+    }
+
+    // 3. Set season default based on medium/type
+    if (metadata.type === "Movie" && !metadata.season) {
+      metadata.season = "1";
+    } else if (metadata.type === "TV Show" && !metadata.season) {
+      // For TV shows, if we don't have season info, default to "Season 1"
+      metadata.season = "Season 1";
+    }
+
+    // 4. Auto-fill episodes for movies
+    if (metadata.type === "Movie" && !metadata.episodes) {
+      metadata.episodes = 1;
+    }
+
+    // 5. Ensure price defaults to 0
+    metadata.price = 0;
 
     return NextResponse.json(metadata);
   } catch (error) {

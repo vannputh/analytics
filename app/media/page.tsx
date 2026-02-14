@@ -81,7 +81,7 @@ function EntriesPageContent() {
   useEffect(() => {
     if (searchParams.get("refreshed") === "1") {
       refreshEntries()
-      router.replace("/movies")
+      router.replace("/media")
     }
   }, [searchParams, router, refreshEntries])
 

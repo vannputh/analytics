@@ -168,7 +168,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      execute_sql_query: {
+        Args: { query_text: string }
+        Returns: unknown[]
+      }
     }
     Enums: {
       [_ in never]: never

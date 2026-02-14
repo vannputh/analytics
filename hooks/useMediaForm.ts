@@ -122,7 +122,7 @@ export function useMediaForm(entryId?: string | null) {
                 if (!result.success) {
                     console.error("Error fetching entry:", result.error)
                     toast.error(result.error || "Failed to load entry")
-                    router.push("/movies/analytics")
+                    router.push("/media/analytics")
                     return
                 }
 
@@ -175,7 +175,7 @@ export function useMediaForm(entryId?: string | null) {
                 if (cancelled) return
                 console.error("Error fetching entry:", err)
                 toast.error("Failed to load entry")
-                router.push("/movies/analytics")
+                router.push("/media/analytics")
             } finally {
                 if (!cancelled) {
                     setFetching(false)
@@ -333,7 +333,7 @@ export function useMediaForm(entryId?: string | null) {
                 const result = await updateEntry(entryId, entryData)
                 if (result.success) {
                     toast.success("Entry updated successfully")
-                    router.push(returnTo || "/movies")
+                    router.push(returnTo || "/media")
                 } else {
                     toast.error(result.error || "Failed to update entry")
                 }
@@ -341,7 +341,7 @@ export function useMediaForm(entryId?: string | null) {
                 const result = await createEntry(entryData)
                 if (result.success) {
                     toast.success("Entry created successfully")
-                    router.push("/movies?refreshed=1")
+                    router.push("/media?refreshed=1")
                 } else {
                     toast.error(result.error || "Failed to create entry")
                 }

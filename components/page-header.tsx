@@ -7,7 +7,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/client"
-import { Plus, LogOut, Film, Utensils } from "lucide-react"
+import { Plus, LogOut, Film, Utensils, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
 // Dynamic imports for dialog components - reduces initial bundle size
@@ -19,9 +19,13 @@ const FoodAddDialog = dynamic(
   () => import("@/components/food-add-dialog").then(m => m.FoodAddDialog),
   { ssr: false }
 )
+const AIQueryDialog = dynamic(
+  () => import("@/components/ai-query-dialog").then(m => m.AIQueryDialog),
+  { ssr: false }
+)
 
 const WORKSPACES = {
-  movies: { label: "Media", icon: Film, path: "/movies" },
+  media: { label: "Media", icon: Film, path: "/media" },
   food: { label: "Food & Drinks", icon: Utensils, path: "/food" },
 } as const
 
@@ -40,14 +44,18 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
   const pathname = usePathname()
   const [showMediaDialog, setShowMediaDialog] = useState(false)
   const [showFoodDialog, setShowFoodDialog] = useState(false)
+  const [showAIQueryDialog, setShowAIQueryDialog] = useState(false)
 
   // Determine current workspace from URL
   const currentWorkspaceKey = (Object.keys(WORKSPACES).find(key =>
     pathname?.startsWith(`/${key}`)
-  ) || "movies") as WorkspaceKey
+  ) || "media") as WorkspaceKey
 
   const currentWorkspace = WORKSPACES[currentWorkspaceKey]
   const CurrentIcon = currentWorkspace.icon
+
+  // Map workspace key to AI query workspace type
+  const aiWorkspace = currentWorkspaceKey === "media" ? "media" : "food"
 
   const isDiaryPage = pathname === currentWorkspace.path
   const isAnalyticsPage = pathname === `${currentWorkspace.path}/analytics`
@@ -72,7 +80,7 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
             variant="ghost"
             size="icon"
             onClick={() => {
-              const targetWorkspace = currentWorkspaceKey === "movies" ? "food" : "movies"
+              const targetWorkspace = currentWorkspaceKey === "media" ? "food" : "media"
               router.push(`${WORKSPACES[targetWorkspace].path}/analytics`)
             }}
             className="h-8 w-8"
@@ -102,8 +110,19 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
 
         {/* Right side: Navigation buttons */}
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+          {/* AI Query Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAIQueryDialog(true)}
+            className="h-8 w-8"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span className="sr-only">AI Analysis</span>
+          </Button>
+
           {/* Add Button Logic */}
-          {currentWorkspaceKey === "movies" && (
+          {currentWorkspaceKey === "media" && (
             <Button
               variant="ghost"
               size="icon"
@@ -162,6 +181,11 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
           initialDate={new Date().toISOString()}
         />
       )}
+      <AIQueryDialog
+        open={showAIQueryDialog}
+        onOpenChange={setShowAIQueryDialog}
+        workspace={aiWorkspace}
+      />
     </header>
   )
 }

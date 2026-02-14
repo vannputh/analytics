@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { normalizeGeminiError } from "@/lib/gemini-errors"
 
 const SYSTEM_INSTRUCTION = `You are a strict data cleaner for a media tracking application. Your job is to normalize messy CSV data into a clean, structured JSON format.
 
@@ -165,9 +166,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { message, statusCode } = normalizeGeminiError(error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { error: message },
+      { status: statusCode && statusCode >= 400 && statusCode < 600 ? statusCode : 500 }
     )
   }
 }

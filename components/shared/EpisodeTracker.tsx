@@ -17,6 +17,8 @@ interface EpisodeTrackerProps {
     onAddEpisode: () => void;
     onDeleteEpisode: (idx: number) => void;
     onEditEpisode: (idx: number, newDate: string) => void;
+    onFinishedToday?: () => void;
+    totalEpisodes?: number | null;
 }
 
 export function EpisodeTracker({
@@ -26,6 +28,8 @@ export function EpisodeTracker({
     onAddEpisode,
     onDeleteEpisode,
     onEditEpisode,
+    onFinishedToday,
+    totalEpisodes,
 }: EpisodeTrackerProps) {
     const [editingIdx, setEditingIdx] = useState<number | null>(null);
     const [editingDate, setEditingDate] = useState<string>("");
@@ -62,6 +66,16 @@ export function EpisodeTracker({
                         <PlayCircle className="mr-2 h-4 w-4" />
                         Add Episode
                     </Button>
+                    {onFinishedToday && totalEpisodes && totalEpisodes > 0 && (
+                        <Button 
+                            onClick={onFinishedToday} 
+                            size="sm" 
+                            variant="outline"
+                            disabled={episodeHistory.length > 0 && Math.max(...episodeHistory.map(e => e.episode)) >= totalEpisodes}
+                        >
+                            Finished Today
+                        </Button>
+                    )}
                 </div>
             </div>
 

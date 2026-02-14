@@ -9,7 +9,8 @@ import { normalizeLanguage } from '@/lib/language-utils'
 function revalidateAll() {
   revalidatePath('/')
   revalidatePath('/dashboard')
-  revalidatePath('/movies')
+  revalidatePath('/media')
+  revalidatePath('/media/analytics')
   revalidatePath('/analytics')
   revalidatePath('/books')
 }

@@ -22,6 +22,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { BasicDetailsSection } from "@/components/media/forms/BasicDetailsSection";
 import {
     Clock,
     Calendar,
@@ -124,6 +125,10 @@ export function MediaDetailsDialog({
     // Metadata Fetching State
     const [fetchingMetadata, setFetchingMetadata] = useState(false);
     const [fetchingSource, setFetchingSource] = useState<"omdb" | "tmdb" | null>(null);
+
+    // New Platform Input State
+    const [showNewPlatformInput, setShowNewPlatformInput] = useState(false);
+    const [newPlatformValue, setNewPlatformValue] = useState("");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const initialFormDataRef = useRef<string | null>(null);
@@ -235,6 +240,20 @@ export function MediaDetailsDialog({
         }
     }, [formData.finish_date]);
 
+    // When status is set to "Finished", auto-sync episodes_watched to episodes
+    useEffect(() => {
+        if (formData.status === "Finished" && formData.episodes && formData.episodes_watched !== formData.episodes) {
+            setFormData(prev => ({ ...prev, episodes_watched: prev.episodes }));
+        }
+    }, [formData.status, formData.episodes]);
+
+    // When medium is set to "Movie", auto-set episodes to 1
+    useEffect(() => {
+        if (formData.medium === "Movie" && !formData.episodes) {
+            setFormData(prev => ({ ...prev, episodes: 1 }));
+        }
+    }, [formData.medium]);
+
     // Load dropdown options
     useEffect(() => {
         async function fetchOptions() {
@@ -340,43 +359,99 @@ export function MediaDetailsDialog({
         return /^tt\d{7,8}$/i.test(trimmed);
     };
 
-    const handleFetchMetadata = async (source: "omdb" | "tmdb") => {
-        const isImdbId = detectIMDbID(formData.imdb_id);
-        const hasTitle = formData.title?.trim();
+    const extractIMDbID = (input: string): string | null => {
+        // Try direct ID match
+        const idMatch = input.match(/tt\d{7,8}/i);
+        if (idMatch) return idMatch[0];
+        
+        // Try URL pattern: https://www.imdb.com/title/tt1234567/
+        const urlMatch = input.match(/imdb\.com\/title\/(tt\d{7,8})/i);
+        if (urlMatch) return urlMatch[1];
+        
+        return null;
+    };
 
-        if (!hasTitle && !isImdbId) {
-            toast.error("Please enter a title or IMDb ID first");
-            return;
+    const handleIMDbIDChange = async (value: string) => {
+        setFormData(p => ({ ...p, imdb_id: value }));
+        
+        // Extract IMDB ID if URL was pasted
+        const extracted = extractIMDbID(value);
+        if (extracted && extracted !== value) {
+            // URL was pasted, update with just the ID
+            setFormData(p => ({ ...p, imdb_id: extracted }));
+            
+            // Auto-fetch metadata
+            await fetchMetadataByParams({
+                imdb_id: extracted,
+                medium: formData.medium || undefined,
+            }, "tmdb");
         }
+    };
 
+    const handleIMDbIDBlur = async () => {
+        const imdbId = formData.imdb_id?.trim();
+        if (!imdbId) return;
+        
+        const extracted = extractIMDbID(imdbId);
+        if (extracted && detectIMDbID(extracted)) {
+            // Valid IMDB ID detected on blur, auto-fetch if title is empty
+            if (!formData.title?.trim()) {
+                await fetchMetadataByParams({
+                    imdb_id: extracted,
+                    medium: formData.medium || undefined,
+                }, "tmdb");
+            }
+        }
+    };
+
+    const handleNewPlatformBlur = () => {
+        if (newPlatformValue.trim()) {
+            const trimmedValue = newPlatformValue.trim();
+            setFormData(p => ({ ...p, platform: trimmedValue }));
+            
+            // Add to dropdown options if not already present
+            setDropdownOptions(prev => {
+                if (prev.platforms.includes(trimmedValue)) {
+                    return prev;
+                }
+                return {
+                    ...prev,
+                    platforms: [...prev.platforms, trimmedValue]
+                };
+            });
+            
+            setShowNewPlatformInput(false);
+            setNewPlatformValue("");
+        } else {
+            setShowNewPlatformInput(false);
+        }
+    };
+
+    const fetchMetadataByParams = async (params: { title?: string; imdb_id?: string; medium?: string; season?: string }, source: "omdb" | "tmdb" = "tmdb") => {
         setFetchingMetadata(true);
         setFetchingSource(source);
 
         try {
-            let url = "";
-
-            if (isImdbId) {
-                url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`;
-                if (hasTitle && formData.title) {
-                    url += `&title=${encodeURIComponent(formData.title.trim())}`;
-                }
-            } else {
-                url = `/api/metadata?title=${encodeURIComponent((formData.title || "").trim())}&source=${source}`;
+            let url = `/api/metadata?source=${source}`;
+            
+            if (params.imdb_id) {
+                url += `&imdb_id=${encodeURIComponent(params.imdb_id)}`;
             }
-
-            if (formData.medium) {
+            if (params.title) {
+                url += `&title=${encodeURIComponent(params.title)}`;
+            }
+            if (params.medium) {
                 const typeMap: Record<string, string> = {
                     "Movie": "movie",
                     "TV Show": "series",
                 };
-                const omdbType = typeMap[formData.medium];
+                const omdbType = typeMap[params.medium];
                 if (omdbType) {
                     url += `&type=${omdbType}`;
                 }
             }
-
-            if (formData.season) {
-                url += `&season=${encodeURIComponent(formData.season)}`;
+            if (params.season) {
+                url += `&season=${encodeURIComponent(params.season)}`;
             }
 
             const response = await fetch(url);
@@ -399,12 +474,12 @@ export function MediaDetailsDialog({
                 length: metadata.length || prev.length,
                 episodes: metadata.episodes !== null ? metadata.episodes : prev.episodes,
                 imdb_id: metadata.imdb_id || prev.imdb_id,
-                // Only set type/medium if it was missing to avoid overwriting user choice unintentionally, or ask user. 
-                // For simplicity in this dialog, we'll keep existing unless empty.
-                medium: prev.medium || (metadata.type === "movie" ? "Movie" : metadata.type === "series" ? "TV Show" : prev.medium),
+                medium: prev.medium || (metadata.type === "Movie" ? "Movie" : metadata.type === "TV Show" ? "TV Show" : prev.medium),
+                type: metadata.content_type || prev.type,
+                season: metadata.season || prev.season,
             }));
 
-            toast.success(`Updated from ${source.toUpperCase()}`);
+            toast.success(`Metadata fetched successfully`);
 
         } catch (error) {
             console.error(error);
@@ -413,6 +488,32 @@ export function MediaDetailsDialog({
             setFetchingMetadata(false);
             setFetchingSource(null);
         }
+    };
+
+    const handleFetchMetadata = async (source: "omdb" | "tmdb") => {
+        const isImdbId = detectIMDbID(formData.imdb_id);
+        const hasTitle = formData.title?.trim();
+
+        if (!hasTitle && !isImdbId) {
+            toast.error("Please enter a title or IMDb ID first");
+            return;
+        }
+
+        await fetchMetadataByParams({
+            title: hasTitle ? formData.title?.trim() : undefined,
+            imdb_id: isImdbId ? formData.imdb_id?.trim() : undefined,
+            medium: formData.medium || undefined,
+            season: formData.season || undefined,
+        }, source);
+    };
+
+    const handleSelectSearchResult = async (result: any) => {
+        // Auto-fetch metadata when user selects from autocomplete
+        await fetchMetadataByParams({
+            imdb_id: result.imdb_id,
+            title: result.title,
+            medium: result.media_type === "tv" ? "TV Show" : "Movie",
+        }, "tmdb");
     };
 
     const handleAddEpisode = async () => {
@@ -504,6 +605,57 @@ export function MediaDetailsDialog({
         } catch (error) {
             console.error(error);
             toast.error("An error occurred");
+        }
+    };
+
+    const handleFinishedToday = async () => {
+        if (!entry || !formData.episodes) {
+            toast.error("Please set total episodes first");
+            return;
+        }
+
+        // Get the last logged episode
+        const lastEpisode = episodeHistory.length > 0 ? Math.max(...episodeHistory.map(e => e.episode)) : 0;
+        const totalEpisodes = formData.episodes;
+
+        if (lastEpisode >= totalEpisodes) {
+            toast.error("All episodes already logged");
+            return;
+        }
+
+        // Generate new episode records for all remaining episodes
+        const today = new Date().toISOString();
+        const newRecords: EpisodeWatchRecord[] = [];
+        
+        for (let ep = lastEpisode + 1; ep <= totalEpisodes; ep++) {
+            newRecords.push({
+                episode: ep,
+                watched_at: today,
+            });
+        }
+
+        const updatedHistory = [...episodeHistory, ...newRecords].sort((a, b) => b.episode - a.episode);
+        setEpisodeHistory(updatedHistory);
+
+        try {
+            const result = await updateEntry(entry.id, {
+                episodes_watched: totalEpisodes,
+                episode_history: updatedHistory as any,
+                last_watched_at: today,
+            });
+            
+            if (result.success) {
+                toast.success(`Logged episodes ${lastEpisode + 1}-${totalEpisodes} as finished today`);
+                setNewEpisodeNumber(totalEpisodes + 1);
+                onSuccess?.(result.data);
+            } else {
+                toast.error(result.error);
+                setEpisodeHistory(episodeHistory);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to log episodes");
+            setEpisodeHistory(episodeHistory);
         }
     };
 
@@ -689,44 +841,14 @@ export function MediaDetailsDialog({
                                 {/* GENERAL TAB */}
                                 {activeTab === "general" && (
                                     <div className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Title with Metadata Fetch */}
-                                        <div className="col-span-full space-y-2">
-                                            <Label>Title</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    value={formData.title || ""}
-                                                    onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))}
-                                                    className="flex-1"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="font-medium transition-all"
-                                                    onClick={() => handleFetchMetadata("omdb")}
-                                                    disabled={fetchingMetadata}
-                                                >
-                                                    {fetchingMetadata && fetchingSource === "omdb" ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                    ) : (
-                                                        <Film className="h-4 w-4 mr-2" />
-                                                    )}
-                                                    OMDB
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="font-medium transition-all"
-                                                    onClick={() => handleFetchMetadata("tmdb")}
-                                                    disabled={fetchingMetadata}
-                                                >
-                                                    {fetchingMetadata && fetchingSource === "tmdb" ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                                    ) : (
-                                                        <Tv className="h-4 w-4 mr-2" />
-                                                    )}
-                                                    TMDB
-                                                </Button>
-                                            </div>
+                                        {/* Title with Autocomplete */}
+                                        <div className="col-span-full">
+                                            <BasicDetailsSection
+                                                title={formData.title || null}
+                                                onChange={(value) => setFormData(p => ({ ...p, title: value }))}
+                                                onSelectResult={handleSelectSearchResult}
+                                                autoFocus={isNewEntry}
+                                            />
                                         </div>
 
                                         {/* Status */}
@@ -762,15 +884,38 @@ export function MediaDetailsDialog({
                                         {/* Platform */}
                                         <div className="space-y-2">
                                             <Label>Platform</Label>
-                                            <Select
-                                                value={formData.platform || undefined}
-                                                onValueChange={(val) => setFormData(p => ({ ...p, platform: val }))}
-                                            >
-                                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {dropdownOptions.platforms.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                            {showNewPlatformInput ? (
+                                                <Input
+                                                    value={newPlatformValue}
+                                                    onChange={(e) => setNewPlatformValue(e.target.value)}
+                                                    placeholder="Enter new platform"
+                                                    onBlur={handleNewPlatformBlur}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                            e.currentTarget.blur();
+                                                        }
+                                                    }}
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <Select
+                                                    value={formData.platform || "__none__"}
+                                                    onValueChange={(val) => {
+                                                        if (val === "__new__") {
+                                                            setShowNewPlatformInput(true);
+                                                        } else {
+                                                            setFormData(p => ({ ...p, platform: val === "__none__" ? null : val }));
+                                                        }
+                                                    }}
+                                                >
+                                                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="__none__">None</SelectItem>
+                                                        {dropdownOptions.platforms.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                                        <SelectItem value="__new__">+ New Platform</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
                                         </div>
 
                                         {/* IMDb ID */}
@@ -778,8 +923,9 @@ export function MediaDetailsDialog({
                                             <Label>IMDb ID</Label>
                                             <Input
                                                 value={formData.imdb_id || ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, imdb_id: e.target.value }))}
-                                                placeholder="tt1234567"
+                                                onChange={(e) => handleIMDbIDChange(e.target.value)}
+                                                onBlur={handleIMDbIDBlur}
+                                                placeholder="tt1234567 or paste IMDB URL"
                                             />
                                         </div>
 
@@ -796,11 +942,31 @@ export function MediaDetailsDialog({
                                         {/* Finish Date */}
                                         <div className="space-y-2">
                                             <Label>Finish Date</Label>
-                                            <Input
-                                                type="date"
-                                                value={formData.finish_date ? formData.finish_date.split('T')[0] : ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, finish_date: e.target.value }))}
-                                            />
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="date"
+                                                    value={formData.finish_date ? formData.finish_date.split('T')[0] : ""}
+                                                    onChange={(e) => setFormData(p => ({ ...p, finish_date: e.target.value }))}
+                                                    className="flex-1"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        if (formData.start_date) {
+                                                            setFormData(p => ({ ...p, finish_date: p.start_date }));
+                                                            toast.success("Finish date matched to start date");
+                                                        } else {
+                                                            toast.error("Please set start date first");
+                                                        }
+                                                    }}
+                                                    disabled={!formData.start_date}
+                                                    title="Match start date"
+                                                >
+                                                    Match
+                                                </Button>
+                                            </div>
                                         </div>
 
                                         {/* Episodes Progress */}
@@ -908,6 +1074,8 @@ export function MediaDetailsDialog({
                                                 toast.error("An error occurred");
                                             }
                                         }}
+                                        onFinishedToday={handleFinishedToday}
+                                        totalEpisodes={formData.episodes}
                                     />
                                 )}
 
@@ -943,20 +1111,6 @@ export function MediaDetailsDialog({
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     Delete
                                 </Button>
-                                {entry && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-muted-foreground"
-                                        onClick={() => {
-                                            const returnTo = encodeURIComponent((pathname || "/movies") + (typeof window !== "undefined" ? window.location.search : ""));
-                                            handleOpenChange(false);
-                                            router.push(`/movies/add?id=${entry.id}&returnTo=${returnTo}`);
-                                        }}
-                                    >
-                                        Open in full form
-                                    </Button>
-                                )}
                             </div>
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
