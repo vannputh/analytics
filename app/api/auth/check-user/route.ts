@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { Database } from '@/lib/database.types'
 
-// This route checks if a user exists in Supabase Auth
-// Only existing users should be able to receive magic links
+// This route checks if a user exists in Supabase Auth and their approval status
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json()
@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Use service role key to access auth.users table
-    // This should be set in your environment variables as SUPABASE_SERVICE_ROLE_KEY
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create admin client with service role key
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false
@@ -43,9 +42,6 @@ export async function POST(request: NextRequest) {
     })
 
     // Check if user exists by email
-    // Note: We list users and filter by email since Supabase Admin API
-    // doesn't have a direct "get user by email" method
-    // For a personal app with manually added users, this is acceptable
     const { data, error } = await supabaseAdmin.auth.admin.listUsers()
     
     if (error) {
@@ -58,11 +54,37 @@ export async function POST(request: NextRequest) {
 
     // Check if email exists in the users list (case-insensitive)
     const normalizedEmail = email.toLowerCase().trim()
-    const userExists = data.users.some(user => 
+    const authUser = data.users.find(user => 
       user.email?.toLowerCase().trim() === normalizedEmail
     )
 
-    return NextResponse.json({ exists: userExists })
+    if (!authUser) {
+      return NextResponse.json({ exists: false })
+    }
+
+    // User exists in auth, now check their profile status
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('status')
+      .eq('user_id', authUser.id)
+      .single()
+
+    if (profileError) {
+      // User exists in auth but no profile yet (shouldn't happen with our flow)
+      console.error('Profile not found for user:', authUser.id)
+      return NextResponse.json({ 
+        exists: true, 
+        approved: false,
+        status: 'unknown'
+      })
+    }
+
+    // Return user existence and approval status
+    return NextResponse.json({ 
+      exists: true, 
+      approved: profile.status === 'approved',
+      status: profile.status
+    })
   } catch (error) {
     console.error('Error in check-user route:', error)
     return NextResponse.json(

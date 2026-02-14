@@ -6,11 +6,12 @@ import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
-import { LoginForm, OtpForm } from "@/components/auth"
+import { LoginForm, OtpForm, SignupForm, AuthToggle } from "@/components/auth"
 
 function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [mode, setMode] = useState<"login" | "signup">("login")
   const [email, setEmail] = useState("")
   const [otpCode, setOtpCode] = useState("")
   const [emailSent, setEmailSent] = useState(false)
@@ -23,8 +24,68 @@ function LoginPageContent() {
       toast.error("Authentication failed. Please try again.")
     } else if (error === "unauthorized") {
       toast.error("Access denied. This account is not authorized.")
+    } else if (error === "not_approved") {
+      toast.error("Your account is pending approval. Please wait for admin approval.")
     }
   }, [searchParams])
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!email) {
+      toast.error("Please enter your email address")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // Check if user already exists
+      const apiUrl = `${window.location.origin}/api/auth/check-user`
+      const checkResponse = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const contentType = checkResponse.headers.get("content-type")
+      const isJson = contentType?.includes("application/json")
+
+      if (checkResponse.ok && isJson) {
+        const checkData = await checkResponse.json()
+        
+        if (checkData.exists) {
+          if (checkData.approved === false) {
+            toast.error("Your request is already pending approval.")
+          } else {
+            toast.error("This email is already registered. Please use the login option.")
+          }
+          setLoading(false)
+          return
+        }
+      }
+
+      // Create auth user and send OTP for email verification
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?signup=true`,
+        },
+      })
+
+      if (error) throw error
+
+      setEmailSent(true)
+      toast.success("Check your email! Enter the verification code to complete your request.")
+    } catch (error) {
+      console.error("Signup error:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to send verification code")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,8 +98,7 @@ function LoginPageContent() {
     setLoading(true)
 
     try {
-      // First, check if user exists
-      // Use absolute URL to avoid issues with relative paths
+      // Check if user exists and is approved
       const apiUrl = `${window.location.origin}/api/auth/check-user`
       const checkResponse = await fetch(apiUrl, {
         method: "POST",
@@ -48,12 +108,10 @@ function LoginPageContent() {
         body: JSON.stringify({ email }),
       })
 
-      // Check content type before parsing
       const contentType = checkResponse.headers.get("content-type")
       const isJson = contentType?.includes("application/json")
 
       if (!checkResponse.ok) {
-        // Try to parse error message, but handle empty responses
         let errorMessage = "Failed to verify user"
         let errorDetails: string | undefined
         try {
@@ -62,13 +120,11 @@ function LoginPageContent() {
             errorMessage = errorData.error || errorMessage
             errorDetails = errorData.details
           } else {
-            // If not JSON, read as text to see what we got
             const text = await checkResponse.text()
             console.error("Non-JSON error response:", text.substring(0, 200))
             errorMessage = checkResponse.statusText || errorMessage
           }
         } catch (parseError) {
-          // If response is not JSON, use status text
           errorMessage = checkResponse.statusText || errorMessage
         }
         console.error("Check user failed:", {
@@ -91,12 +147,24 @@ function LoginPageContent() {
       const checkData = await checkResponse.json()
 
       if (!checkData.exists) {
-        toast.error("This email is not registered. Please contact the administrator.")
+        toast.error("This email is not registered. Please request access first.")
         setLoading(false)
         return
       }
 
-      // User exists, proceed with sending magic link
+      if (checkData.approved === false) {
+        if (checkData.status === 'pending') {
+          toast.error("Your account is pending approval. Please wait for admin approval.")
+        } else if (checkData.status === 'rejected') {
+          toast.error("Your access request was rejected. Please contact the administrator.")
+        } else {
+          toast.error("Your account is not approved. Please contact the administrator.")
+        }
+        setLoading(false)
+        return
+      }
+
+      // User exists and is approved, proceed with sending magic link
       const redirectTo = searchParams.get("redirect") || "/"
       const { error } = await supabase.auth.signInWithOtp({
         email,
@@ -136,9 +204,45 @@ function LoginPageContent() {
 
       if (error) throw error
 
-      toast.success("Login successful!")
-      const redirectTo = searchParams.get("redirect") || "/"
-      router.push(redirectTo)
+      if (mode === "signup") {
+        // For signup, create the user profile with pending status
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (user) {
+          // Insert user profile
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              email: user.email!,
+              status: 'pending',
+            })
+
+          if (profileError) {
+            console.error("Profile creation error:", profileError)
+            // Sign out the user since we couldn't create the profile
+            await supabase.auth.signOut()
+            toast.error("Failed to create profile. Please try again.")
+            setLoading(false)
+            return
+          }
+
+          // Sign out after creating the profile
+          await supabase.auth.signOut()
+          toast.success("Access requested! Please wait for admin approval. You'll receive an email once approved.")
+          
+          // Reset form
+          setEmail("")
+          setOtpCode("")
+          setEmailSent(false)
+          setMode("login")
+        }
+      } else {
+        // For login, redirect to the app
+        toast.success("Login successful!")
+        const redirectTo = searchParams.get("redirect") || "/"
+        router.push(redirectTo)
+      }
     } catch (error) {
       console.error("OTP verification error:", error)
       toast.error(error instanceof Error ? error.message : "Invalid code. Please try again.")
@@ -153,10 +257,14 @@ function LoginPageContent() {
 
     try {
       const redirectTo = searchParams.get("redirect") || "/"
+      const isSignup = mode === "signup"
+      
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+          emailRedirectTo: isSignup 
+            ? `${window.location.origin}/auth/callback?signup=true`
+            : `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
         },
       })
 
@@ -176,25 +284,47 @@ function LoginPageContent() {
     setOtpCode("")
   }
 
+  const toggleMode = () => {
+    setMode(mode === "login" ? "signup" : "login")
+    setEmailSent(false)
+    setOtpCode("")
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">
+            {mode === "login" ? "Login" : "Request Access"}
+          </CardTitle>
           <CardDescription>
             {emailSent
               ? `We sent a code to ${email}`
-              : "Enter your email to receive a magic link and code"}
+              : mode === "login"
+              ? "Enter your email to receive a magic link and code"
+              : "Request access to the application"}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {!emailSent ? (
-            <LoginForm
-              email={email}
-              onEmailChange={setEmail}
-              onSubmit={handleLogin}
-              loading={loading}
-            />
+            <>
+              {mode === "login" ? (
+                <LoginForm
+                  email={email}
+                  onEmailChange={setEmail}
+                  onSubmit={handleLogin}
+                  loading={loading}
+                />
+              ) : (
+                <SignupForm
+                  email={email}
+                  onEmailChange={setEmail}
+                  onSubmit={handleSignup}
+                  loading={loading}
+                />
+              )}
+              <AuthToggle mode={mode} onToggle={toggleMode} />
+            </>
           ) : (
             <OtpForm
               otpCode={otpCode}

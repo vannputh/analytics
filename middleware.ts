@@ -1,12 +1,13 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { Database } from "@/lib/database.types"
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -42,16 +43,42 @@ export async function proxy(request: NextRequest) {
   }
 
   // Public routes that don't require authentication
-  const isPublicRoute = pathname.startsWith("/login") || 
+  const isPublicRoute = pathname === "/" ||
+                       pathname.startsWith("/login") || 
                        pathname.startsWith("/auth")
   
   // Only redirect GET requests for page routes (not POST, PUT, DELETE, etc.)
-  // API routes are already handled above
   if (!user && !isPublicRoute && request.method === "GET") {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     url.searchParams.set("redirect", pathname)
     return NextResponse.redirect(url)
+  }
+
+  // If user is authenticated, check their approval status for non-public routes
+  if (user && !isPublicRoute && request.method === "GET") {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('status, is_admin')
+      .eq('user_id', user.id)
+      .single()
+
+    // Allow admin routes only for admins
+    if (pathname.startsWith("/admin")) {
+      if (!profile || !profile.is_admin) {
+        const url = request.nextUrl.clone()
+        url.pathname = "/"
+        return NextResponse.redirect(url)
+      }
+    }
+
+    // Check if user is approved (skip check for admin routes as we already checked admin status)
+    if (!pathname.startsWith("/admin") && profile && profile.status !== 'approved') {
+      const url = request.nextUrl.clone()
+      url.pathname = "/login"
+      url.searchParams.set("error", "not_approved")
+      return NextResponse.redirect(url)
+    }
   }
 
   // Redirect authenticated users away from login page (only GET requests)
@@ -64,7 +91,6 @@ export async function proxy(request: NextRequest) {
   // Remove browsing-topics from Permissions-Policy header to avoid warnings
   const permissionsPolicy = supabaseResponse.headers.get("Permissions-Policy")
   if (permissionsPolicy) {
-    // Remove browsing-topics if present
     const policies = permissionsPolicy.split(",").map(p => p.trim())
     const filteredPolicies = policies.filter(p => !p.startsWith("browsing-topics"))
     if (filteredPolicies.length !== policies.length) {

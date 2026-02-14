@@ -8,10 +8,10 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { MediaEntryInsert } from "@/lib/database.types"
+import { MediaEntryInsertFromCsv } from "@/lib/database.types"
 
 interface ImportPreviewTableProps {
-    previewData: MediaEntryInsert[]
+    previewData: MediaEntryInsertFromCsv[]
     totalRows: number
 }
 

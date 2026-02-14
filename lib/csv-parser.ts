@@ -1,4 +1,4 @@
-import { MediaEntryInsert } from "@/lib/database.types"
+import { MediaEntryInsertFromCsv } from "@/lib/database.types"
 import { differenceInDays } from "date-fns/differenceInDays"
 import { parseISO } from "date-fns/parseISO"
 import { isValid } from "date-fns/isValid"
@@ -24,7 +24,7 @@ export interface ParsedRow {
     [key: string]: unknown
 }
 
-export function transformCleanedData(data: any[]): MediaEntryInsert[] {
+export function transformCleanedData(data: any[]): MediaEntryInsertFromCsv[] {
     return data
         .filter((row: any) => row.title)
         .map((row: any) => {

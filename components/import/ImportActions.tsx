@@ -2,7 +2,7 @@
 
 import { Loader2, FileText, Sparkles, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { MediaEntryInsert } from "@/lib/database.types"
+import { MediaEntryInsertFromCsv } from "@/lib/database.types"
 
 interface ImportActionsProps {
     onImport: () => void
@@ -11,7 +11,7 @@ interface ImportActionsProps {
     cleaning: boolean
     importing: boolean
     fetching: boolean
-    cleanedData: MediaEntryInsert[]
+    cleanedData: MediaEntryInsertFromCsv[]
     pastedData: string
     totalRows: number
     fetchProgress: { current: number; total: number }

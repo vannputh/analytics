@@ -33,9 +33,22 @@ export async function createEntry(data: CreateEntryInput): Promise<ActionRespons
   try {
     const supabase = await createClient()
 
+    // Get current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    // Add user_id to the data
+    const entryData = {
+      ...data,
+      user_id: user.id
+    }
+
     const { data: newEntry, error } = await (supabase
       .from('media_entries' as any) as any)
-      .insert(data)
+      .insert(entryData)
       .select()
       .single()
 
@@ -139,12 +152,25 @@ export async function batchUploadEntries(entries: CreateEntryInput[]): Promise<A
   try {
     const supabase = await createClient()
 
+    // Get current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    // Add user_id to all entries
+    const entriesWithUserId = entries.map(entry => ({
+      ...entry,
+      user_id: user.id
+    }))
+
     // Insert entries in batches of 100 to avoid timeout
     const batchSize = 100
     const results = []
 
-    for (let i = 0; i < entries.length; i += batchSize) {
-      const batch = entries.slice(i, i + batchSize)
+    for (let i = 0; i < entriesWithUserId.length; i += batchSize) {
+      const batch = entriesWithUserId.slice(i, i + batchSize)
 
       const { data, error } = await (supabase
         .from('media_entries' as any) as any)

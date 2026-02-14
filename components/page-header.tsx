@@ -1,14 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/client"
-import { Plus, LogOut, Film, Utensils, Sparkles } from "lucide-react"
-import { toast } from "sonner"
+import { Plus, Film, Utensils, Sparkles } from "lucide-react"
+import { ProfileDropdown } from "@/components/profile"
 
 // Dynamic imports for dialog components - reduces initial bundle size
 const MediaDetailsDialog = dynamic(
@@ -45,6 +45,28 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
   const [showMediaDialog, setShowMediaDialog] = useState(false)
   const [showFoodDialog, setShowFoodDialog] = useState(false)
   const [showAIQueryDialog, setShowAIQueryDialog] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('is_admin')
+          .eq('user_id', user.id)
+          .single()
+        
+        if (profile?.is_admin) {
+          setIsAdmin(true)
+        }
+      }
+    }
+    checkAdmin()
+  }, [])
 
   // Determine current workspace from URL
   const currentWorkspaceKey = (Object.keys(WORKSPACES).find(key =>
@@ -59,17 +81,6 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
 
   const isDiaryPage = pathname === currentWorkspace.path
   const isAnalyticsPage = pathname === `${currentWorkspace.path}/analytics`
-
-  const handleLogout = async () => {
-    const supabaseClient = createClient()
-    const { error } = await supabaseClient.auth.signOut()
-    if (error) {
-      toast.error("Failed to logout")
-    } else {
-      router.push("/login")
-      router.refresh()
-    }
-  }
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -147,15 +158,7 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
           )}
 
           <ThemeToggle />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            className="h-8 w-8"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="sr-only">Logout</span>
-          </Button>
+          <ProfileDropdown isAdmin={isAdmin} />
         </div>
       </div>
 

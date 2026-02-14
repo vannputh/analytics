@@ -201,9 +201,22 @@ export async function createFoodEntry(data: FoodEntryInsert): Promise<ActionResp
     try {
         const supabase = await createClient()
 
+        // Get current user
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
+        // Add user_id to the data
+        const entryData = {
+            ...data,
+            user_id: user.id
+        }
+
         const { data: newEntry, error } = await (supabase
             .from('food_entries' as any) as any)
-            .insert(data)
+            .insert(entryData)
             .select()
             .single()
 
@@ -349,17 +362,30 @@ export async function addFoodEntryImage(data: FoodEntryImageInsert): Promise<Act
     try {
         const supabase = await createClient()
 
+        // Get current user
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
+        // Add user_id to the data
+        const imageData = {
+            ...data,
+            user_id: user.id
+        }
+
         // If this image is primary, unset any other primary images for this entry
-        if (data.is_primary) {
+        if (imageData.is_primary) {
             await (supabase
                 .from('food_entry_images' as any) as any)
                 .update({ is_primary: false })
-                .eq('food_entry_id', data.food_entry_id)
+                .eq('food_entry_id', imageData.food_entry_id)
         }
 
         const { data: newImage, error } = await (supabase
             .from('food_entry_images' as any) as any)
-            .insert(data)
+            .insert(imageData)
             .select()
             .single()
 

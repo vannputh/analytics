@@ -42,6 +42,7 @@ export type Database = {
           title: string
           type: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           average_rating?: number | null
@@ -69,6 +70,7 @@ export type Database = {
           title: string
           type?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
           average_rating?: number | null
@@ -96,6 +98,7 @@ export type Database = {
           title?: string
           type?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -108,6 +111,7 @@ export type Database = {
           changed_at: string
           notes: string | null
           created_at: string
+          user_id: string
         }
         Insert: {
           id?: string
@@ -117,6 +121,7 @@ export type Database = {
           changed_at?: string
           notes?: string | null
           created_at?: string
+          user_id: string
         }
         Update: {
           id?: string
@@ -126,6 +131,7 @@ export type Database = {
           changed_at?: string
           notes?: string | null
           created_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -158,6 +164,48 @@ export type Database = {
           user_id?: string
           preference_key?: string
           preference_value?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          email: string
+          status: 'pending' | 'approved' | 'rejected'
+          is_admin: boolean
+          requested_at: string
+          approved_at: string | null
+          approved_by: string | null
+          rejection_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          email: string
+          status?: 'pending' | 'approved' | 'rejected'
+          is_admin?: boolean
+          requested_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          email?: string
+          status?: 'pending' | 'approved' | 'rejected'
+          is_admin?: boolean
+          requested_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          rejection_reason?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -300,6 +348,8 @@ export type CompositeTypes<
 // Convenience type aliases
 export type MediaEntry = Tables<"media_entries">
 export type MediaEntryInsert = TablesInsert<"media_entries">
+/** Media entry fields from CSV/import; user_id is added at insert time. */
+export type MediaEntryInsertFromCsv = Omit<MediaEntryInsert, "user_id">
 export type MediaEntryUpdate = TablesUpdate<"media_entries">
 export type MediaStatusHistory = Tables<"media_status_history">
 export type MediaStatusHistoryInsert = TablesInsert<"media_status_history">
@@ -307,6 +357,9 @@ export type MediaStatusHistoryUpdate = TablesUpdate<"media_status_history">
 export type UserPreference = Tables<"user_preferences">
 export type UserPreferenceInsert = TablesInsert<"user_preferences">
 export type UserPreferenceUpdate = TablesUpdate<"user_preferences">
+export type UserProfile = Tables<"user_profiles">
+export type UserProfileInsert = TablesInsert<"user_profiles">
+export type UserProfileUpdate = TablesUpdate<"user_profiles">
 
 // Item ordered with optional price, image, and category
 export type ItemOrdered = {
@@ -350,14 +403,17 @@ export type FoodEntry = {
   tags: string[] | null
   would_return: boolean | null
   notes: string | null
+  user_id: string
   created_at: string
   updated_at: string
 }
 
-export type FoodEntryInsert = Omit<FoodEntry, 'id' | 'created_at' | 'updated_at'> & {
+// user_id is optional on insert; server sets it from auth
+export type FoodEntryInsert = Omit<FoodEntry, 'id' | 'created_at' | 'updated_at' | 'user_id'> & {
   id?: string
   created_at?: string
   updated_at?: string
+  user_id?: string
 }
 
 export type FoodEntryUpdate = Partial<Omit<FoodEntry, 'id'>>
@@ -370,12 +426,15 @@ export type FoodEntryImage = {
   image_url: string
   is_primary: boolean
   caption: string | null
+  user_id: string
   created_at: string
 }
 
-export type FoodEntryImageInsert = Omit<FoodEntryImage, 'id' | 'created_at'> & {
+// user_id is optional on insert; server sets it from auth
+export type FoodEntryImageInsert = Omit<FoodEntryImage, 'id' | 'created_at' | 'user_id'> & {
   id?: string
   created_at?: string
+  user_id?: string
 }
 
 // Medium types for filtering

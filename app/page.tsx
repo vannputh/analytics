@@ -1,5 +1,30 @@
-import { redirect } from "next/navigation"
+"use client"
 
-export default function Home() {
-  redirect("/media/analytics")
+import { useRouter } from "next/navigation"
+import { Hero, Features, Navbar, Footer } from "@/components/landing"
+import { ThemeProvider } from "@/components/theme-provider"
+
+export default function LandingPage() {
+  const router = useRouter()
+
+  const handleRequestAccess = () => {
+    router.push("/login")
+  }
+
+  const handleLogin = () => {
+    router.push("/login")
+  }
+
+  return (
+    <ThemeProvider>
+      <div className="min-h-screen flex flex-col">
+        <Navbar onRequestAccess={handleRequestAccess} onLogin={handleLogin} />
+        <main className="flex-1 pt-16">
+          <Hero onRequestAccess={handleRequestAccess} onLogin={handleLogin} />
+          <Features />
+        </main>
+        <Footer />
+      </div>
+    </ThemeProvider>
+  )
 }
