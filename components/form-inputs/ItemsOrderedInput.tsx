@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
-import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2, Copy } from "lucide-react"
+import { Star, X, Plus, Camera, Edit2, Loader2, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -87,14 +87,18 @@ function CategoryEdit({
                         <Plus className="h-3 w-3" />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="p-0 w-[200px]" align="start">
+                <PopoverContent className="p-0 w-[240px]" align="start" sideOffset={6}>
                     <Command>
                         <CommandInput
                             placeholder="Category..."
                             value={inputValue}
                             onValueChange={setInputValue}
                         />
-                        <CommandList>
+                        <CommandList
+                            className="max-h-52 overflow-y-auto overscroll-contain"
+                            onWheelCapture={(e) => e.stopPropagation()}
+                            onTouchMoveCapture={(e) => e.stopPropagation()}
+                        >
                             <CommandEmpty>
                                 <button
                                     type="button"

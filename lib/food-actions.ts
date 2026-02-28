@@ -357,6 +357,108 @@ export async function uploadFoodImage(
     }
 }
 
+const REMOTE_IMAGE_MIME_TO_EXT: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/avif': 'avif',
+}
+
+const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024
+
+function getFileExtFromUrl(url: string): string | null {
+    try {
+        const parsed = new URL(url)
+        const path = parsed.pathname
+        const dotIndex = path.lastIndexOf('.')
+        if (dotIndex === -1 || dotIndex === path.length - 1) return null
+        const ext = path.slice(dotIndex + 1).toLowerCase()
+        return /^[a-z0-9]+$/.test(ext) ? ext : null
+    } catch {
+        return null
+    }
+}
+
+// Fetch an external image and persist it into Supabase storage.
+export async function uploadFoodImageFromUrl(
+    imageUrl: string,
+    entryId: string,
+    imageType: 'place' | 'item',
+    itemIndex?: number
+): Promise<ActionResponse<{ url: string; path: string }>> {
+    try {
+        const normalizedUrl = imageUrl.trim()
+        if (!/^https?:\/\//i.test(normalizedUrl)) {
+            return { success: false, error: 'Invalid image URL' }
+        }
+
+        const response = await fetch(normalizedUrl, { cache: 'no-store' })
+        if (!response.ok) {
+            return { success: false, error: `Failed to fetch remote image (${response.status})` }
+        }
+
+        const rawContentType = response.headers.get('content-type')?.split(';')[0]?.toLowerCase() || ''
+        if (!rawContentType.startsWith('image/')) {
+            return { success: false, error: 'Remote URL did not return an image' }
+        }
+
+        const contentLength = Number(response.headers.get('content-length') || '0')
+        if (contentLength > MAX_REMOTE_IMAGE_BYTES) {
+            return { success: false, error: 'Remote image is too large' }
+        }
+
+        const arrayBuffer = await response.arrayBuffer()
+        if (arrayBuffer.byteLength === 0) {
+            return { success: false, error: 'Remote image was empty' }
+        }
+        if (arrayBuffer.byteLength > MAX_REMOTE_IMAGE_BYTES) {
+            return { success: false, error: 'Remote image is too large' }
+        }
+
+        const extFromMime = REMOTE_IMAGE_MIME_TO_EXT[rawContentType]
+        const extFromUrl = getFileExtFromUrl(normalizedUrl)
+        const ext = extFromMime || extFromUrl || 'jpg'
+        const timestamp = Date.now()
+        const path = imageType === 'place'
+            ? `${entryId}/place_remote_${itemIndex ?? 0}_${timestamp}.${ext}`
+            : `${entryId}/items/item_${itemIndex ?? 0}_remote_${timestamp}.${ext}`
+
+        const supabase = await createClient()
+        const { error: uploadError } = await supabase.storage
+            .from('food-images')
+            .upload(path, arrayBuffer, {
+                contentType: rawContentType || undefined,
+                cacheControl: '3600',
+                upsert: false
+            })
+
+        if (uploadError) {
+            console.error('Error uploading remote image:', uploadError)
+            return { success: false, error: uploadError.message }
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('food-images')
+            .getPublicUrl(path)
+
+        return {
+            success: true,
+            data: {
+                url: urlData.publicUrl,
+                path
+            }
+        }
+    } catch (error) {
+        console.error('Unexpected remote upload error:', error)
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        }
+    }
+}
+
 // Add image to food entry
 export async function addFoodEntryImage(data: FoodEntryImageInsert): Promise<ActionResponse<FoodEntryImage>> {
     try {

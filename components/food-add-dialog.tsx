@@ -2,8 +2,17 @@
 
 import { useState, useEffect, useRef } from "react"
 import { FoodEntry, FoodEntryInsert, FoodEntryUpdate, ItemOrdered } from "@/lib/database.types"
-import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getFoodEntry, getFoodEntries, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
-import { PRICE_LEVELS, FOOD_TAGS, DINING_OPTIONS, formatDualCurrency, formatRestaurantDisplayName, USD_TO_KHR_RATE } from "@/lib/food-types"
+import {
+    createFoodEntry,
+    updateFoodEntry,
+    uploadFoodImage,
+    uploadFoodImageFromUrl,
+    addFoodEntryImage,
+    getFoodEntry,
+    getUniqueCuisineTypes,
+    getUniqueItemCategories
+} from "@/lib/food-actions"
+import { PRICE_LEVELS, FOOD_TAGS, DINING_OPTIONS, formatRestaurantDisplayName, USD_TO_KHR_RATE } from "@/lib/food-types"
 import {
     Dialog,
     DialogContent,
@@ -15,7 +24,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -28,30 +36,17 @@ import {
 import {
     Star,
     Loader2,
-    X,
-    Plus,
-    MapPin,
     DollarSign,
     Calendar as CalendarIcon,
     Utensils,
-    Camera,
     Upload,
-    ImageIcon,
+    ArrowRight,
     Check,
-    ChevronsUpDown,
 } from "lucide-react"
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns/format"
 import { isValid } from "date-fns/isValid"
 import Image from "next/image"
@@ -62,7 +57,18 @@ import {
     CarouselPrevious,
     CarouselNext,
 } from "@/components/ui/carousel"
-import { RatingInput, CuisineSelector, MultiSelectInput, PlaceImageUpload, ItemsOrderedInput, type PlaceImage, type ItemWithPreview } from "@/components/form-inputs"
+import { RatingInput, CuisineSelector, MultiSelectInput, PlaceImageUpload, ItemsOrderedInput } from "@/components/form-inputs"
+import { useFoodPlaceAutocomplete, type FoodAutocompleteSuggestion } from "@/hooks/useFoodPlaceAutocomplete"
+import type { FoodPlaceDetailsResponse } from "@/lib/food-place-types"
+import {
+    createFoodFormSnapshot,
+    getFoodSaveProgressLabel,
+    mapWithConcurrency,
+    normalizePlaceImages,
+    parseLocalDateInput,
+    type FoodImageDraft,
+    type FoodSaveProgress,
+} from "@/lib/food-add-utils"
 
 interface FoodAddDialogProps {
     entry?: FoodEntry | null
@@ -91,9 +97,9 @@ export function FoodAddDialog({
     const [branch, setBranch] = useState("")
     const [visitDate, setVisitDate] = useState<Date | undefined>(
         entry?.visit_date
-            ? new Date(entry.visit_date)
+            ? parseLocalDateInput(entry.visit_date)
             : initialDate
-                ? new Date(initialDate)
+                ? parseLocalDateInput(initialDate)
                 : undefined
     )
     const [category, setCategory] = useState<string>("")
@@ -118,19 +124,25 @@ export function FoodAddDialog({
     const [diningType, setDiningType] = useState<string>("")
     const [wouldReturn, setWouldReturn] = useState<boolean | null>(null)
     const [notes, setNotes] = useState("")
-    const [placeImages, setPlaceImages] = useState<{ file?: File; preview: string; is_primary: boolean }[]>([])
+    const [placeImages, setPlaceImages] = useState<FoodImageDraft[]>([])
     const sidebarFileInputRef = useRef<HTMLInputElement>(null)
     const nameInputRef = useRef<HTMLInputElement>(null)
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
     const baselineRef = useRef<string | null>(null)
+    const [saveProgress, setSaveProgress] = useState<FoodSaveProgress>({
+        phase: "idle",
+        placeUploaded: 0,
+        placeTotal: 0,
+        itemUploaded: 0,
+        itemTotal: 0,
+    })
 
-    // Restaurant name autocomplete: suggestions and "just selected" to avoid refetch on autofill
-    const [placeSuggestions, setPlaceSuggestions] = useState<FoodEntry[]>([])
+    // Restaurant name autocomplete
     const [placeSuggestionsOpen, setPlaceSuggestionsOpen] = useState(false)
-    const justSelectedPlaceRef = useRef(false)
-    const placeSearchQueryRef = useRef<string>("")
-    const nameForSearchRef = useRef(name)
-    nameForSearchRef.current = name
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+    const [isNameFocused, setIsNameFocused] = useState(false)
+    const ignoreBlurRef = useRef(false)
+    const lastAutofillKeyRef = useRef<string | null>(null)
 
     const handlePlaceFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files
@@ -162,7 +174,7 @@ export function FoodAddDialog({
         })
 
         const newImages = await Promise.all(readPromises)
-        setPlaceImages(prev => [...prev, ...newImages])
+        setPlaceImages(prev => normalizePlaceImages([...prev, ...newImages]))
 
         if (sidebarFileInputRef.current) sidebarFileInputRef.current.value = ''
     }
@@ -170,6 +182,35 @@ export function FoodAddDialog({
     const [isAutofilling, setIsAutofilling] = useState(false)
     const [availableCuisines, setAvailableCuisines] = useState<string[]>([])
     const [availableItemCategories, setAvailableItemCategories] = useState<string[]>([])
+
+    const {
+        suggestions: placeSuggestions,
+        isSearching: isSearchingPlaces,
+    } = useFoodPlaceAutocomplete({
+        open,
+        isEditing,
+        query: name,
+    })
+
+    useEffect(() => {
+        if (!isNameFocused || isEditing) {
+            setPlaceSuggestionsOpen(false)
+            setSelectedSuggestionIndex(-1)
+            return
+        }
+
+        const shouldOpen = name.trim().length >= 2 && placeSuggestions.length > 0
+        setPlaceSuggestionsOpen(shouldOpen)
+        if (!shouldOpen) {
+            setSelectedSuggestionIndex(-1)
+        }
+    }, [isNameFocused, isEditing, name, placeSuggestions.length])
+
+    useEffect(() => {
+        if (selectedSuggestionIndex >= placeSuggestions.length) {
+            setSelectedSuggestionIndex(-1)
+        }
+    }, [selectedSuggestionIndex, placeSuggestions.length])
 
     // Load available cuisines and item categories
     useEffect(() => {
@@ -188,170 +229,282 @@ export function FoodAddDialog({
         loadOptions()
     }, [])
 
-    // Debounced place search for restaurant name autocomplete (new entry only)
-    useEffect(() => {
-        if (!open || isEditing) return
-        if (justSelectedPlaceRef.current) {
-            justSelectedPlaceRef.current = false
-            setPlaceSuggestions([])
-            setPlaceSuggestionsOpen(false)
-            return
-        }
-        const query = name.trim()
-        if (query.length < 2) {
-            setPlaceSuggestions([])
-            setPlaceSuggestionsOpen(false)
-            return
-        }
-        const timer = setTimeout(async () => {
-            const result = await getFoodEntries({ search: query, limit: 30 })
-            if (!result.success) return
-            if (nameForSearchRef.current.trim() !== query) return
-            const seen = new Set<string>()
-            const deduped: FoodEntry[] = []
-            for (const e of result.data) {
-                const key = `${e.name}\0${e.branch ?? ""}`
-                if (seen.has(key)) continue
-                seen.add(key)
-                deduped.push(e)
-            }
-            placeSearchQueryRef.current = query
-            setPlaceSuggestions(deduped)
-            setPlaceSuggestionsOpen(deduped.length > 0)
-        }, 280)
-        return () => clearTimeout(timer)
-    }, [open, isEditing, name])
-
     // Calculate total from items for display
     const itemsTotal = itemsOrdered.reduce((sum, item) => sum + (item.price || 0), 0)
     const displayTotal = totalPrice ? parseFloat(totalPrice) : itemsTotal
 
     // Initialize form from entry, template (duplicate), or defaults
     useEffect(() => {
+        if (!open) return
+
+        setSelectedSuggestionIndex(-1)
+        setPlaceSuggestionsOpen(false)
+        setSaveProgress({
+            phase: "idle",
+            placeUploaded: 0,
+            placeTotal: 0,
+            itemUploaded: 0,
+            itemTotal: 0,
+        })
+        lastAutofillKeyRef.current = null
+
         if (entry) {
-            setName(entry.name)
-            setBranch(entry.branch ?? "")
-            setVisitDate(entry.visit_date ? new Date(entry.visit_date + "T00:00:00") : undefined)
-            setCategory(entry.category || "")
-            setAddress(entry.address || "")
-            setGoogleMapsUrl(entry.google_maps_url || "")
-            setNeighborhood(entry.neighborhood || "")
-            setCity(entry.city || "")
-            setCountry(entry.country || "Cambodia")
-            setInstagramHandle(entry.instagram_handle || "")
-            setWebsiteUrl(entry.website_url || "")
-            setCuisineTypes(entry.cuisine_type || [])
-            setTags(entry.tags || [])
-            // Map existing items to include preview property
-            setItemsOrdered(
-                (entry.items_ordered || []).map(item => ({
-                    ...item,
-                    preview: item.image_url || undefined
-                }))
-            )
-            setFavoriteItem(entry.favorite_item || null)
-            setOverallRating(entry.overall_rating)
-            setFoodRating(entry.food_rating)
-            setAmbianceRating(entry.ambiance_rating)
-            setServiceRating(entry.service_rating)
-            setValueRating(entry.value_rating)
-            setTotalPrice(entry.total_price?.toString() || "")
-            setPriceLevel(entry.price_level || "")
-            setDiningType(entry.dining_type || "")
-            setWouldReturn(entry.would_return ?? null)
-            setNotes(entry.notes || "")
-            setPlaceImages(entry.images?.map(img => ({
+            const nextName = entry.name
+            const nextBranch = entry.branch ?? ""
+            const nextVisitDate = parseLocalDateInput(entry.visit_date)
+            const nextCategory = entry.category || ""
+            const nextAddress = entry.address || ""
+            const nextGoogleMapsUrl = entry.google_maps_url || ""
+            const nextNeighborhood = entry.neighborhood || ""
+            const nextCity = entry.city || ""
+            const nextCountry = entry.country || "Cambodia"
+            const nextInstagramHandle = entry.instagram_handle || ""
+            const nextWebsiteUrl = entry.website_url || ""
+            const nextCuisineTypes = entry.cuisine_type || []
+            const nextTags = entry.tags || []
+            const nextItems = (entry.items_ordered || []).map(item => ({
+                ...item,
+                preview: item.image_url || undefined
+            }))
+            const nextFavoriteItem = entry.favorite_item || null
+            const nextOverallRating = entry.overall_rating
+            const nextFoodRating = entry.food_rating
+            const nextAmbianceRating = entry.ambiance_rating
+            const nextServiceRating = entry.service_rating
+            const nextValueRating = entry.value_rating
+            const nextTotalPrice = entry.total_price?.toString() || ""
+            const nextPriceLevel = entry.price_level || ""
+            const nextDiningType = entry.dining_type || ""
+            const nextWouldReturn = entry.would_return ?? null
+            const nextNotes = entry.notes || ""
+            const nextPlaceImages = normalizePlaceImages(entry.images?.map(img => ({
                 preview: img.image_url,
                 is_primary: img.is_primary
             })) || [])
-            baselineRef.current = JSON.stringify({
-                name: entry.name, branch: entry.branch ?? "", visitDate: entry.visit_date, category: entry.category || "", address: entry.address || "", googleMapsUrl: entry.google_maps_url || "",
-                neighborhood: entry.neighborhood || "", city: entry.city || "", country: entry.country || "", instagramHandle: entry.instagram_handle || "", websiteUrl: entry.website_url || "",
-                cuisineTypes: (entry.cuisine_type || []).slice().sort(), tags: (entry.tags || []).slice().sort(),
-                items: (entry.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: entry.favorite_item || "",
-                overallRating: entry.overall_rating, foodRating: entry.food_rating, ambianceRating: entry.ambiance_rating, serviceRating: entry.service_rating, valueRating: entry.value_rating,
-                totalPrice: entry.total_price?.toString() || "", priceLevel: entry.price_level || "", diningType: entry.dining_type || "", wouldReturn: entry.would_return ?? null, notes: entry.notes || "", placeImagesCount: entry.images?.length ?? 0
+
+            setName(nextName)
+            setBranch(nextBranch)
+            setVisitDate(nextVisitDate)
+            setCategory(nextCategory)
+            setAddress(nextAddress)
+            setGoogleMapsUrl(nextGoogleMapsUrl)
+            setNeighborhood(nextNeighborhood)
+            setCity(nextCity)
+            setCountry(nextCountry)
+            setInstagramHandle(nextInstagramHandle)
+            setWebsiteUrl(nextWebsiteUrl)
+            setCuisineTypes(nextCuisineTypes)
+            setTags(nextTags)
+            setItemsOrdered(nextItems)
+            setFavoriteItem(nextFavoriteItem)
+            setOverallRating(nextOverallRating)
+            setFoodRating(nextFoodRating)
+            setAmbianceRating(nextAmbianceRating)
+            setServiceRating(nextServiceRating)
+            setValueRating(nextValueRating)
+            setTotalPrice(nextTotalPrice)
+            setPriceLevel(nextPriceLevel)
+            setDiningType(nextDiningType)
+            setWouldReturn(nextWouldReturn)
+            setNotes(nextNotes)
+            setPlaceImages(nextPlaceImages)
+
+            baselineRef.current = createFoodFormSnapshot({
+                name: nextName,
+                branch: nextBranch,
+                visitDate: nextVisitDate,
+                category: nextCategory,
+                address: nextAddress,
+                googleMapsUrl: nextGoogleMapsUrl,
+                neighborhood: nextNeighborhood,
+                city: nextCity,
+                country: nextCountry,
+                instagramHandle: nextInstagramHandle,
+                websiteUrl: nextWebsiteUrl,
+                cuisineTypes: nextCuisineTypes,
+                tags: nextTags,
+                items: nextItems.map((item) => ({
+                    name: item.name,
+                    price: item.price,
+                    categories: item.categories || (item.category ? [item.category] : []),
+                    imageIdentity: item.image_url || null,
+                })),
+                favoriteItem: nextFavoriteItem || "",
+                overallRating: nextOverallRating,
+                foodRating: nextFoodRating,
+                ambianceRating: nextAmbianceRating,
+                serviceRating: nextServiceRating,
+                valueRating: nextValueRating,
+                totalPrice: nextTotalPrice,
+                priceLevel: nextPriceLevel,
+                diningType: nextDiningType,
+                wouldReturn: nextWouldReturn,
+                notes: nextNotes,
+                placeImages: nextPlaceImages,
             })
-        } else if (template) {
-            // Duplicate: same place, new visit (visit date = initialDate or today)
-            setName(template.name)
-            setBranch(template.branch ?? "")
-            setVisitDate(initialDate ? new Date(initialDate) : new Date())
-            setCategory(template.category || "")
-            setAddress(template.address || "")
-            setGoogleMapsUrl(template.google_maps_url || "")
-            setNeighborhood(template.neighborhood || "")
-            setCity(template.city || "")
-            setCountry(template.country || "Cambodia")
-            setInstagramHandle(template.instagram_handle || "")
-            setWebsiteUrl(template.website_url || "")
-            setCuisineTypes(template.cuisine_type || [])
-            setTags(template.tags || [])
-            setItemsOrdered(
-                (template.items_ordered || []).map(item => ({
-                    ...item,
-                    preview: item.image_url || undefined
-                }))
-            )
-            setFavoriteItem(template.favorite_item || null)
-            setOverallRating(template.overall_rating)
-            setFoodRating(template.food_rating)
-            setAmbianceRating(template.ambiance_rating)
-            setServiceRating(template.service_rating)
-            setValueRating(template.value_rating)
-            setTotalPrice(template.total_price?.toString() || "")
-            setPriceLevel(template.price_level || "")
-            setDiningType(template.dining_type || "")
-            setWouldReturn(template.would_return ?? null)
-            setNotes(template.notes || "")
-            setPlaceImages(template.images?.map(img => ({
-                preview: img.image_url,
-                is_primary: img.is_primary
-            })) || [])
-            const templateVisitDate = initialDate ? new Date(initialDate) : new Date()
-            baselineRef.current = JSON.stringify({
-                name: template.name, branch: template.branch ?? "", visitDate: format(templateVisitDate, "yyyy-MM-dd"), category: template.category || "", address: template.address || "", googleMapsUrl: template.google_maps_url || "",
-                neighborhood: template.neighborhood || "", city: template.city || "", country: template.country || "", instagramHandle: template.instagram_handle || "", websiteUrl: template.website_url || "",
-                cuisineTypes: (template.cuisine_type || []).slice().sort(), tags: (template.tags || []).slice().sort(),
-                items: (template.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: template.favorite_item || "",
-                overallRating: template.overall_rating, foodRating: template.food_rating, ambianceRating: template.ambiance_rating, serviceRating: template.service_rating, valueRating: template.value_rating,
-                totalPrice: template.total_price?.toString() || "", priceLevel: template.price_level || "", diningType: template.dining_type || "", wouldReturn: template.would_return ?? null, notes: template.notes || "", placeImagesCount: template.images?.length ?? 0
-            })
-        } else {
-            // Reset for new entry
-            setName("")
-            setBranch("")
-            setVisitDate(initialDate ? new Date(initialDate) : new Date())
-            setCategory("")
-            setAddress("")
-            setGoogleMapsUrl("")
-            setNeighborhood("")
-            setCity("")
-            setCountry("Cambodia")
-            setInstagramHandle("")
-            setWebsiteUrl("")
-            setCuisineTypes([])
-            setTags([])
-            setItemsOrdered([])
-            setFavoriteItem(null)
-            setOverallRating(null)
-            setFoodRating(null)
-            setAmbianceRating(null)
-            setServiceRating(null)
-            setValueRating(null)
-            setTotalPrice("")
-            setPriceLevel("")
-            setDiningType("")
-            setWouldReturn(null)
-            setNotes("")
-            setPlaceImages([])
-            const defaultVisit = initialDate ? new Date(initialDate) : new Date()
-            baselineRef.current = JSON.stringify({
-                name: "", branch: "", visitDate: format(defaultVisit, "yyyy-MM-dd"), category: "", address: "", googleMapsUrl: "", neighborhood: "", city: "", country: "Cambodia", instagramHandle: "", websiteUrl: "",
-                cuisineTypes: [], tags: [], items: [], favoriteItem: "", overallRating: null, foodRating: null, ambianceRating: null, serviceRating: null, valueRating: null,
-                totalPrice: "", priceLevel: "", diningType: "", wouldReturn: null, notes: "", placeImagesCount: 0
-            })
+            return
         }
+
+        if (template) {
+            const templateVisitDate = parseLocalDateInput(initialDate) || new Date()
+            const nextName = template.name
+            const nextBranch = template.branch ?? ""
+            const nextCategory = template.category || ""
+            const nextAddress = template.address || ""
+            const nextGoogleMapsUrl = template.google_maps_url || ""
+            const nextNeighborhood = template.neighborhood || ""
+            const nextCity = template.city || ""
+            const nextCountry = template.country || "Cambodia"
+            const nextInstagramHandle = template.instagram_handle || ""
+            const nextWebsiteUrl = template.website_url || ""
+            const nextCuisineTypes = template.cuisine_type || []
+            const nextTags = template.tags || []
+            const nextItems = (template.items_ordered || []).map(item => ({
+                ...item,
+                preview: item.image_url || undefined
+            }))
+            const nextFavoriteItem = template.favorite_item || null
+            const nextOverallRating = template.overall_rating
+            const nextFoodRating = template.food_rating
+            const nextAmbianceRating = template.ambiance_rating
+            const nextServiceRating = template.service_rating
+            const nextValueRating = template.value_rating
+            const nextTotalPrice = template.total_price?.toString() || ""
+            const nextPriceLevel = template.price_level || ""
+            const nextDiningType = template.dining_type || ""
+            const nextWouldReturn = template.would_return ?? null
+            const nextNotes = template.notes || ""
+            const nextPlaceImages = normalizePlaceImages(template.images?.map(img => ({
+                preview: img.image_url,
+                is_primary: img.is_primary
+            })) || [])
+
+            setName(nextName)
+            setBranch(nextBranch)
+            setVisitDate(templateVisitDate)
+            setCategory(nextCategory)
+            setAddress(nextAddress)
+            setGoogleMapsUrl(nextGoogleMapsUrl)
+            setNeighborhood(nextNeighborhood)
+            setCity(nextCity)
+            setCountry(nextCountry)
+            setInstagramHandle(nextInstagramHandle)
+            setWebsiteUrl(nextWebsiteUrl)
+            setCuisineTypes(nextCuisineTypes)
+            setTags(nextTags)
+            setItemsOrdered(nextItems)
+            setFavoriteItem(nextFavoriteItem)
+            setOverallRating(nextOverallRating)
+            setFoodRating(nextFoodRating)
+            setAmbianceRating(nextAmbianceRating)
+            setServiceRating(nextServiceRating)
+            setValueRating(nextValueRating)
+            setTotalPrice(nextTotalPrice)
+            setPriceLevel(nextPriceLevel)
+            setDiningType(nextDiningType)
+            setWouldReturn(nextWouldReturn)
+            setNotes(nextNotes)
+            setPlaceImages(nextPlaceImages)
+
+            baselineRef.current = createFoodFormSnapshot({
+                name: nextName,
+                branch: nextBranch,
+                visitDate: templateVisitDate,
+                category: nextCategory,
+                address: nextAddress,
+                googleMapsUrl: nextGoogleMapsUrl,
+                neighborhood: nextNeighborhood,
+                city: nextCity,
+                country: nextCountry,
+                instagramHandle: nextInstagramHandle,
+                websiteUrl: nextWebsiteUrl,
+                cuisineTypes: nextCuisineTypes,
+                tags: nextTags,
+                items: nextItems.map((item) => ({
+                    name: item.name,
+                    price: item.price,
+                    categories: item.categories || (item.category ? [item.category] : []),
+                    imageIdentity: item.image_url || null,
+                })),
+                favoriteItem: nextFavoriteItem || "",
+                overallRating: nextOverallRating,
+                foodRating: nextFoodRating,
+                ambianceRating: nextAmbianceRating,
+                serviceRating: nextServiceRating,
+                valueRating: nextValueRating,
+                totalPrice: nextTotalPrice,
+                priceLevel: nextPriceLevel,
+                diningType: nextDiningType,
+                wouldReturn: nextWouldReturn,
+                notes: nextNotes,
+                placeImages: nextPlaceImages,
+            })
+            return
+        }
+
+        const defaultVisit = parseLocalDateInput(initialDate) || new Date()
+        setName("")
+        setBranch("")
+        setVisitDate(defaultVisit)
+        setCategory("")
+        setAddress("")
+        setGoogleMapsUrl("")
+        setNeighborhood("")
+        setCity("")
+        setCountry("Cambodia")
+        setInstagramHandle("")
+        setWebsiteUrl("")
+        setCuisineTypes([])
+        setTags([])
+        setItemsOrdered([])
+        setFavoriteItem(null)
+        setOverallRating(null)
+        setFoodRating(null)
+        setAmbianceRating(null)
+        setServiceRating(null)
+        setValueRating(null)
+        setTotalPrice("")
+        setPriceLevel("")
+        setDiningType("")
+        setWouldReturn(null)
+        setNotes("")
+        setPlaceImages([])
+        setSaveProgress({
+            phase: "idle",
+            placeUploaded: 0,
+            placeTotal: 0,
+            itemUploaded: 0,
+            itemTotal: 0,
+        })
+
+        baselineRef.current = createFoodFormSnapshot({
+            name: "",
+            branch: "",
+            visitDate: defaultVisit,
+            category: "",
+            address: "",
+            googleMapsUrl: "",
+            neighborhood: "",
+            city: "",
+            country: "Cambodia",
+            instagramHandle: "",
+            websiteUrl: "",
+            cuisineTypes: [],
+            tags: [],
+            items: [],
+            favoriteItem: "",
+            overallRating: null,
+            foodRating: null,
+            ambianceRating: null,
+            serviceRating: null,
+            valueRating: null,
+            totalPrice: "",
+            priceLevel: "",
+            diningType: "",
+            wouldReturn: null,
+            notes: "",
+            placeImages: [],
+        })
     }, [entry, template, initialDate, open])
 
     // When opening edit with an entry that has no images (e.g. from calendar), fetch full entry so place images load
@@ -365,12 +518,46 @@ export function FoodAddDialog({
             if (cancelled || !result.success) return
             const fullEntry = result.data as { images?: { image_url: string; is_primary: boolean }[] }
             if (fullEntry.images && fullEntry.images.length > 0) {
-                setPlaceImages(
+                const hydratedImages = normalizePlaceImages(
                     fullEntry.images.map((img) => ({
                         preview: img.image_url,
                         is_primary: img.is_primary,
                     }))
                 )
+                setPlaceImages(hydratedImages)
+                baselineRef.current = createFoodFormSnapshot({
+                    name: entry.name,
+                    branch: entry.branch || "",
+                    visitDate: parseLocalDateInput(entry.visit_date),
+                    category: entry.category || "",
+                    address: entry.address || "",
+                    googleMapsUrl: entry.google_maps_url || "",
+                    neighborhood: entry.neighborhood || "",
+                    city: entry.city || "",
+                    country: entry.country || "Cambodia",
+                    instagramHandle: entry.instagram_handle || "",
+                    websiteUrl: entry.website_url || "",
+                    cuisineTypes: entry.cuisine_type || [],
+                    tags: entry.tags || [],
+                    items: (entry.items_ordered || []).map((item) => ({
+                        name: item.name,
+                        price: item.price,
+                        categories: item.categories || (item.category ? [item.category] : []),
+                        imageIdentity: item.image_url || null,
+                    })),
+                    favoriteItem: entry.favorite_item || "",
+                    overallRating: entry.overall_rating,
+                    foodRating: entry.food_rating,
+                    ambianceRating: entry.ambiance_rating,
+                    serviceRating: entry.service_rating,
+                    valueRating: entry.value_rating,
+                    totalPrice: entry.total_price?.toString() || "",
+                    priceLevel: entry.price_level || "",
+                    diningType: entry.dining_type || "",
+                    wouldReturn: entry.would_return ?? null,
+                    notes: entry.notes || "",
+                    placeImages: hydratedImages,
+                })
             }
         })
         return () => {
@@ -390,37 +577,48 @@ export function FoodAddDialog({
     }, [open, entry])
 
     const getCurrentSnapshot = () =>
-        JSON.stringify({
-            name: name,
-            branch: branch,
-            visitDate: visitDate && isValid(visitDate) ? format(visitDate, "yyyy-MM-dd") : "",
-            category: category,
-            address: address,
-            googleMapsUrl: googleMapsUrl,
-            neighborhood: neighborhood,
-            city: city,
-            country: country,
-            instagramHandle: instagramHandle,
-            websiteUrl: websiteUrl,
-            cuisineTypes: [...cuisineTypes].sort(),
-            tags: [...tags].sort(),
-            items: itemsOrdered.map(i => ({ name: i.name, price: i.price })),
+        createFoodFormSnapshot({
+            name,
+            branch,
+            visitDate,
+            category,
+            address,
+            googleMapsUrl,
+            neighborhood,
+            city,
+            country,
+            instagramHandle,
+            websiteUrl,
+            cuisineTypes,
+            tags,
+            items: itemsOrdered.map((item) => ({
+                name: item.name,
+                price: item.price,
+                categories: item.categories || (item.category ? [item.category] : []),
+                imageIdentity:
+                    item.file
+                        ? `file:${item.file.name}:${item.file.size}:${item.file.lastModified}`
+                        : item.image_url || item.preview || null,
+            })),
             favoriteItem: favoriteItem || "",
-            overallRating: overallRating,
-            foodRating: foodRating,
-            ambianceRating: ambianceRating,
-            serviceRating: serviceRating,
-            valueRating: valueRating,
-            totalPrice: totalPrice,
-            priceLevel: priceLevel,
-            diningType: diningType,
-            wouldReturn: wouldReturn,
-            notes: notes,
-            placeImagesCount: placeImages.length,
+            overallRating,
+            foodRating,
+            ambianceRating,
+            serviceRating,
+            valueRating,
+            totalPrice,
+            priceLevel,
+            diningType,
+            wouldReturn,
+            notes,
+            placeImages,
         })
     const isDirty = baselineRef.current !== null && getCurrentSnapshot() !== baselineRef.current
 
     const handleOpenChange = (nextOpen: boolean) => {
+        if (!nextOpen && isSubmitting) {
+            return
+        }
         if (!nextOpen && isDirty) {
             setShowDiscardConfirm(true)
             return
@@ -432,6 +630,15 @@ export function FoodAddDialog({
         setShowDiscardConfirm(false)
         onOpenChange(false)
     }
+
+    const isMapsUrl = (s: string) =>
+        /google\.com\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(s?.trim() ?? "")
+
+    const isGooglePlacePhotoUrl = (url: string) =>
+        /^https?:\/\/places\.googleapis\.com\/v1\/.+\/media/i.test(url.trim())
+
+    const buildAutofillRequestKey = (url?: string, placeId?: string) =>
+        `${placeId?.trim().toLowerCase() || ""}|${url?.trim().toLowerCase() || ""}`
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -447,8 +654,16 @@ export function FoodAddDialog({
         }
 
         setIsSubmitting(true)
+        setSaveProgress({
+            phase: "saving-entry",
+            placeUploaded: 0,
+            placeTotal: 0,
+            itemUploaded: 0,
+            itemTotal: 0,
+        })
 
         try {
+            const uploadConcurrency = 3
             // When items exist, always use their sum as total_price so the card shows the correct value after edit
             const finalTotal =
                 itemsOrdered.length > 0
@@ -502,61 +717,138 @@ export function FoodAddDialog({
 
             if (result.success) {
                 const entryId = result.data.id
+                let finalEntry = result.data
+                let successfulUploads = 0
+                let failedUploads = 0
 
-                // Upload place images
-                if (placeImages.length > 0) {
-                    for (const img of placeImages) {
-                        if (img.file) {
-                            const uploadResult = await uploadFoodImage(img.file, entryId, 'place')
-                            if (uploadResult.success) {
-                                await addFoodEntryImage({
-                                    food_entry_id: entryId,
-                                    image_url: uploadResult.data.url,
-                                    storage_path: uploadResult.data.path,
-                                    is_primary: img.is_primary
-                                } as any)
+                const placeUploadJobs = placeImages
+                    .map((img, index) => ({ img, index }))
+                    .filter(({ img }) => {
+                        if (img.file) return true
+                        return isGooglePlacePhotoUrl(img.preview)
+                    })
+
+                if (placeUploadJobs.length > 0) {
+                    setSaveProgress(prev => ({
+                        ...prev,
+                        phase: "uploading-place",
+                        placeUploaded: 0,
+                        placeTotal: placeUploadJobs.length,
+                    }))
+
+                    await mapWithConcurrency(placeUploadJobs, uploadConcurrency, async ({ img, index }) => {
+                        try {
+                            const uploadResult = img.file
+                                ? await uploadFoodImage(img.file, entryId, "place", index)
+                                : await uploadFoodImageFromUrl(img.preview, entryId, "place", index)
+
+                            if (!uploadResult.success) {
+                                failedUploads += 1
+                                return
                             }
+
+                            const imageResult = await addFoodEntryImage({
+                                food_entry_id: entryId,
+                                image_url: uploadResult.data.url,
+                                storage_path: uploadResult.data.path,
+                                is_primary: img.is_primary,
+                            } as any)
+
+                            if (imageResult.success) {
+                                successfulUploads += 1
+                            } else {
+                                failedUploads += 1
+                            }
+                        } catch (error) {
+                            failedUploads += 1
+                        } finally {
+                            setSaveProgress(prev => ({
+                                ...prev,
+                                placeUploaded: prev.placeUploaded + 1,
+                            }))
                         }
+                    })
+                }
+
+                const itemUploads = itemsOrdered
+                    .map((item, index) => ({ item, index }))
+                    .filter(({ item }) => Boolean(item.file))
+
+                const uploadedItemImageUrls = new Map<number, string>()
+                if (itemUploads.length > 0) {
+                    setSaveProgress(prev => ({
+                        ...prev,
+                        phase: "uploading-items",
+                        itemUploaded: 0,
+                        itemTotal: itemUploads.length,
+                    }))
+
+                    await mapWithConcurrency(itemUploads, uploadConcurrency, async ({ item, index }) => {
+                        try {
+                            const file = item.file
+                            if (!file) {
+                                failedUploads += 1
+                                return
+                            }
+                            const uploadResult = await uploadFoodImage(file, entryId, "item", index)
+                            if (!uploadResult.success) {
+                                failedUploads += 1
+                                return
+                            }
+                            uploadedItemImageUrls.set(index, uploadResult.data.url)
+                            successfulUploads += 1
+                        } catch (error) {
+                            failedUploads += 1
+                        } finally {
+                            setSaveProgress(prev => ({
+                                ...prev,
+                                itemUploaded: prev.itemUploaded + 1,
+                            }))
+                        }
+                    })
+                }
+
+                if (uploadedItemImageUrls.size > 0) {
+                    setSaveProgress(prev => ({ ...prev, phase: "finalizing" }))
+                    const updatedItems = itemsOrdered.map((item, index) => {
+                        const uploadedUrl = uploadedItemImageUrls.get(index)
+                        if (!uploadedUrl) return item
+                        return {
+                            ...item,
+                            image_url: uploadedUrl,
+                            file: undefined,
+                            preview: undefined,
+                        }
+                    })
+
+                    const updatedItemsForDb: ItemOrdered[] = updatedItems.map(item => ({
+                        name: item.name,
+                        price: item.price,
+                        image_url: item.image_url || null,
+                        category: item.category || item.categories?.[0] || null,
+                        categories: item.categories || (item.category ? [item.category] : null)
+                    }))
+
+                    const updateItemsResult = await updateFoodEntry(entryId, { items_ordered: updatedItemsForDb })
+                    if (updateItemsResult.success) {
+                        finalEntry = updateItemsResult.data
+                    } else {
+                        failedUploads += 1
                     }
                 }
 
-                // Upload item images and update items
-                if (itemsOrdered.length > 0) {
-                    const updatedItems = [...itemsOrdered]
-                    let hasNewItemImages = false
-
-                    for (let i = 0; i < updatedItems.length; i++) {
-                        const item = updatedItems[i]
-                        if (item.file) {
-                            const uploadResult = await uploadFoodImage(item.file, entryId, 'item', i)
-                            if (uploadResult.success) {
-                                updatedItems[i] = {
-                                    ...item,
-                                    image_url: uploadResult.data.url,
-                                    file: undefined, // Clear file to avoid re-upload logic if we were to re-submit (though we close dialog)
-                                    preview: undefined
-                                }
-                                hasNewItemImages = true
-                            }
-                        }
-                    }
-
-                    if (hasNewItemImages) {
-                        // Update the entry with new item image URLs
-                        const itemsForDb: ItemOrdered[] = updatedItems.map(item => ({
-                            name: item.name,
-                            price: item.price,
-                            image_url: item.image_url || null,
-                            category: item.category || item.categories?.[0] || null,
-                            categories: item.categories || (item.category ? [item.category] : null)
-                        }))
-
-                        await updateFoodEntry(entryId, { items_ordered: itemsForDb })
-                    }
+                setSaveProgress(prev => ({ ...prev, phase: "finalizing" }))
+                const baseMessage = isEditing ? "Entry updated" : "Entry added"
+                if (failedUploads > 0) {
+                    toast.success(`${baseMessage}. ${successfulUploads} uploaded, ${failedUploads} failed`)
+                } else if (successfulUploads > 0) {
+                    toast.success(`${baseMessage}. Uploaded ${successfulUploads} photo${successfulUploads === 1 ? "" : "s"}`)
+                } else {
+                    toast.success(baseMessage)
                 }
 
-                toast.success(isEditing ? "Entry updated" : "Entry added")
-                onSuccess(result.data)
+                baselineRef.current = null
+                onSuccess(finalEntry)
                 onOpenChange(false)
             } else {
                 toast.error(result.error || "Failed to save entry")
@@ -566,45 +858,65 @@ export function FoodAddDialog({
             toast.error("An error occurred")
         } finally {
             setIsSubmitting(false)
+            setSaveProgress({
+                phase: "idle",
+                placeUploaded: 0,
+                placeTotal: 0,
+                itemUploaded: 0,
+                itemTotal: 0,
+            })
         }
     }
 
-    const isMapsUrl = (s: string) =>
-        /google\.com\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(s?.trim() ?? "")
-
-    const applyPlaceSuggestion = (e: FoodEntry) => {
-        justSelectedPlaceRef.current = true
-        setName(e.name)
-        setBranch(e.branch ?? "")
-        setCategory(e.category ?? "")
-        setCuisineTypes(e.cuisine_type ?? [])
-        setAddress(e.address ?? "")
-        setGoogleMapsUrl(e.google_maps_url ?? "")
-        setNeighborhood(e.neighborhood ?? "")
-        setCity(e.city ?? "")
-        setCountry(e.country ?? "Cambodia")
-        setInstagramHandle(e.instagram_handle ?? "")
-        setWebsiteUrl(e.website_url ?? "")
-        setPlaceSuggestions([])
+    const applyLocalPlaceSuggestion = (selectedEntry: FoodEntry) => {
+        setName(selectedEntry.name)
+        setBranch(selectedEntry.branch ?? "")
+        setCategory(selectedEntry.category ?? "")
+        setCuisineTypes(selectedEntry.cuisine_type ?? [])
+        setAddress(selectedEntry.address ?? "")
+        setGoogleMapsUrl(selectedEntry.google_maps_url ?? "")
+        setNeighborhood(selectedEntry.neighborhood ?? "")
+        setCity(selectedEntry.city ?? "")
+        setCountry(selectedEntry.country ?? "Cambodia")
+        setInstagramHandle(selectedEntry.instagram_handle ?? "")
+        setWebsiteUrl(selectedEntry.website_url ?? "")
         setPlaceSuggestionsOpen(false)
+        setSelectedSuggestionIndex(-1)
     }
 
-    const handleAutofill = async (urlOverride?: string) => {
-        const urlToUse = urlOverride ?? googleMapsUrl
-        if (!urlToUse?.trim()) {
+    const handleAutofill = async (
+        options?: {
+            urlOverride?: string
+            placeId?: string
+            force?: boolean
+        }
+    ) => {
+        const urlToUse = options?.urlOverride ?? googleMapsUrl
+        const normalizedUrl = urlToUse?.trim() || ""
+        const placeIdToUse = options?.placeId?.trim()
+        const requestKey = buildAutofillRequestKey(normalizedUrl, placeIdToUse)
+
+        if (!normalizedUrl && !placeIdToUse) {
             toast.error("Please enter a Google Maps URL first")
+            return
+        }
+
+        if (!options?.force && requestKey && requestKey === lastAutofillKeyRef.current) {
             return
         }
 
         setIsAutofilling(true)
         try {
+            const payload = placeIdToUse
+                ? { placeId: placeIdToUse, url: normalizedUrl || undefined }
+                : { url: normalizedUrl }
             const response = await fetch("/api/maps/place-details", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: urlToUse.trim() }),
+                body: JSON.stringify(payload),
             })
 
-            const data = await response.json()
+            const data = await response.json() as FoodPlaceDetailsResponse & { error?: string }
 
             if (!response.ok) {
                 throw new Error(data.error || "Failed to fetch place details")
@@ -617,6 +929,16 @@ export function FoodAddDialog({
             if (data.city) setCity(data.city)
             if (data.country) setCountry(data.country)
             if (data.priceLevel) setPriceLevel(data.priceLevel)
+            if (data.googleMapsUrl) setGoogleMapsUrl(data.googleMapsUrl)
+            if (data.suggestedCategory) {
+                setCategory(prev => (prev.trim() ? prev : data.suggestedCategory || prev))
+            }
+            if (data.suggestedCuisineTypes && Array.isArray(data.suggestedCuisineTypes)) {
+                const suggested = data.suggestedCuisineTypes.map((value) => value.trim()).filter(Boolean)
+                if (suggested.length > 0) {
+                    setCuisineTypes((prev) => Array.from(new Set([...prev, ...suggested])))
+                }
+            }
 
             // Add photos from Google Places to placeImages
             if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
@@ -624,9 +946,10 @@ export function FoodAddDialog({
                     preview: photoUrl,
                     is_primary: index === 0 // First photo is primary
                 }))
-                setPlaceImages(prev => [...prev, ...newImages])
+                setPlaceImages(prev => normalizePlaceImages([...prev, ...newImages]))
             }
 
+            lastAutofillKeyRef.current = requestKey || null
             toast.success("Autofilled from Google Maps")
         } catch (error) {
             console.error(error)
@@ -635,8 +958,91 @@ export function FoodAddDialog({
             setIsAutofilling(false)
         }
     }
-    const [activeTab, setActiveTab] = useState("general")
+
+    const handleSelectSuggestion = async (suggestion: FoodAutocompleteSuggestion) => {
+        if (suggestion.source === "local" && "entry" in suggestion) {
+            applyLocalPlaceSuggestion(suggestion.entry)
+            return
+        }
+
+        setName(suggestion.name)
+        if (suggestion.googleMapsUrl) {
+            setGoogleMapsUrl(suggestion.googleMapsUrl)
+        }
+        setPlaceSuggestionsOpen(false)
+        setSelectedSuggestionIndex(-1)
+
+        await handleAutofill({
+            placeId: suggestion.placeId || undefined,
+            urlOverride: suggestion.googleMapsUrl || undefined,
+            force: true,
+        })
+    }
+
+    const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!placeSuggestionsOpen || placeSuggestions.length === 0) return
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault()
+            setSelectedSuggestionIndex((prev) => (prev < placeSuggestions.length - 1 ? prev + 1 : prev))
+            return
+        }
+
+        if (e.key === "ArrowUp") {
+            e.preventDefault()
+            setSelectedSuggestionIndex((prev) => (prev > 0 ? prev - 1 : -1))
+            return
+        }
+
+        if (e.key === "Escape") {
+            e.preventDefault()
+            setPlaceSuggestionsOpen(false)
+            setSelectedSuggestionIndex(-1)
+            return
+        }
+
+        if (e.key === "Enter" && selectedSuggestionIndex >= 0) {
+            e.preventDefault()
+            const suggestion = placeSuggestions[selectedSuggestionIndex]
+            if (suggestion) {
+                void handleSelectSuggestion(suggestion)
+            }
+        }
+    }
+
+    const handleNameBlur = () => {
+        setTimeout(() => {
+            if (ignoreBlurRef.current) {
+                ignoreBlurRef.current = false
+                return
+            }
+            setIsNameFocused(false)
+            setPlaceSuggestionsOpen(false)
+        }, 120)
+    }
+
     const tabs = ["general", "location", "items", "ratings", "notes"] as const
+    type FoodDialogTab = (typeof tabs)[number]
+    const [activeTab, setActiveTab] = useState<FoodDialogTab>("general")
+
+    const tabLabels: Record<FoodDialogTab, string> = {
+        general: "General",
+        location: "Location",
+        items: "Items Ordered",
+        ratings: "Ratings & Price",
+        notes: "Notes",
+    }
+
+    const isGeneralComplete = Boolean(name.trim()) && Boolean(visitDate && isValid(visitDate))
+    const tabCompletion: Record<FoodDialogTab, boolean> = {
+        general: isGeneralComplete,
+        location: Boolean(googleMapsUrl.trim() || address.trim() || city.trim() || neighborhood.trim()),
+        items: itemsOrdered.length > 0,
+        ratings: [overallRating, foodRating, ambianceRating, serviceRating, valueRating].some((rating) => rating !== null),
+        notes: Boolean(notes.trim() || tags.length > 0),
+    }
+
+    const saveProgressLabel = getFoodSaveProgressLabel(saveProgress)
 
     // Always open on general tab when dialog opens (add, edit, or duplicate)
     useEffect(() => {
@@ -688,37 +1094,14 @@ export function FoodAddDialog({
                                 )}
                                 onClick={() => setActiveTab(tab)}
                             >
-                                {tab}
+                                <span>{tabLabels[tab]}</span>
+                                {tabCompletion[tab] ? (
+                                    <Check className="h-3.5 w-3.5 ml-1" />
+                                ) : tab === "general" ? (
+                                    <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+                                ) : null}
                             </Button>
                         ))}
-                    </div>
-                    {/* Quick: Paste Maps URL (mobile, any tab) */}
-                    <div className="flex gap-1.5 mt-3">
-                        <Input
-                            value={googleMapsUrl}
-                            onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                            onPaste={(e) => {
-                                const pasted = e.clipboardData.getData("text")?.trim()
-                                if (pasted && isMapsUrl(pasted)) {
-                                    e.preventDefault()
-                                    setGoogleMapsUrl(pasted)
-                                    handleAutofill(pasted)
-                                }
-                            }}
-                            placeholder="Paste Maps link to fill…"
-                            type="url"
-                            className="h-8 text-xs flex-1 min-w-0"
-                        />
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 shrink-0 px-2"
-                            onClick={() => handleAutofill()}
-                            disabled={!googleMapsUrl?.trim() || isAutofilling}
-                        >
-                            {isAutofilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fill"}
-                        </Button>
                     </div>
                 </div>
 
@@ -782,38 +1165,6 @@ export function FoodAddDialog({
                             </p>
                         )}
 
-                        {/* Quick: Paste Maps URL — hidden on desktop; use inline URL in main content */}
-                        <div className="space-y-1.5 w-full hidden">
-                            <p className="text-xs font-medium text-muted-foreground">Paste Maps URL</p>
-                            <div className="flex gap-1.5">
-                                <Input
-                                    value={googleMapsUrl}
-                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                                    onPaste={(e) => {
-                                        const pasted = e.clipboardData.getData("text")?.trim()
-                                        if (pasted && isMapsUrl(pasted)) {
-                                            e.preventDefault()
-                                            setGoogleMapsUrl(pasted)
-                                            handleAutofill(pasted)
-                                        }
-                                    }}
-                                    placeholder="Maps link…"
-                                    type="url"
-                                    className="h-8 text-xs flex-1 min-w-0"
-                                />
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-8 shrink-0 px-2"
-                                    onClick={() => handleAutofill()}
-                                    disabled={!googleMapsUrl?.trim() || isAutofilling}
-                                >
-                                    {isAutofilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fill"}
-                                </Button>
-                            </div>
-                        </div>
-
                         {/* Navigation Tabs (Vertical) */}
                         <div className="flex flex-col gap-1 w-full flex-1">
                             {tabs.map(tab => (
@@ -826,7 +1177,12 @@ export function FoodAddDialog({
                                     )}
                                     onClick={() => setActiveTab(tab)}
                                 >
-                                    {tab === "items" ? "Items Ordered" : tab === "ratings" ? "Ratings & Price" : tab}
+                                    <span className="truncate">{tabLabels[tab]}</span>
+                                    {tabCompletion[tab] ? (
+                                        <Check className="h-3.5 w-3.5 ml-auto" />
+                                    ) : tab === "general" ? (
+                                        <span className="ml-auto inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+                                    ) : null}
                                 </Button>
                             ))}
                         </div>
@@ -856,87 +1212,82 @@ export function FoodAddDialog({
                                 {/* GENERAL TAB */}
                                 {activeTab === "general" && (
                                     <div className="space-y-6">
-                                        {/* Place Photos (Upload / Take Photo + autofill input inline) */}
+                                        {/* Place Photos (upload / take photo) */}
                                         <PlaceImageUpload
                                             images={placeImages}
-                                            onImagesChange={setPlaceImages}
+                                            onImagesChange={(images) => setPlaceImages(normalizePlaceImages(images))}
                                             onFileSelect={handlePlaceFileSelect}
-                                            trailing={
-                                                <div className="hidden md:flex items-center gap-2 flex-1 min-w-[180px]">
-                                                    <Input
-                                                        id="generalGoogleMapsUrl"
-                                                        value={googleMapsUrl}
-                                                        onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                                                        onPaste={(e) => {
-                                                            const pasted = e.clipboardData.getData("text")?.trim()
-                                                            if (pasted && isMapsUrl(pasted)) {
-                                                                e.preventDefault()
-                                                                setGoogleMapsUrl(pasted)
-                                                                handleAutofill(pasted)
-                                                            }
-                                                        }}
-                                                        placeholder="Paste Google Maps link to auto-fill"
-                                                        type="url"
-                                                        className="h-9 flex-1 min-w-0 text-sm placeholder:text-muted-foreground/70 border-dashed"
-                                                    />
-                                                    {isAutofilling && (
-                                                        <span className="text-xs text-muted-foreground flex items-center gap-1.5 shrink-0">
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                            Filling…
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            }
                                         />
 
                                         <Separator />
 
                                         {/* Basic Info */}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2 col-span-full">
+                                            <div className="space-y-2 col-span-full relative">
                                                 <Label htmlFor="name">Restaurant / Place Name <span className="text-red-500">*</span></Label>
-                                                <Popover open={placeSuggestionsOpen && placeSuggestions.length > 0} onOpenChange={(open) => !open && setPlaceSuggestionsOpen(false)}>
-                                                    <PopoverAnchor asChild>
-                                                        <div className="relative">
-                                                            <Input
-                                                                ref={nameInputRef}
-                                                                id="name"
-                                                                value={name}
-                                                                onChange={(e) => setName(e.target.value)}
-                                                                placeholder="e.g., Sushi Masato (type to see existing places)"
-                                                                required
-                                                                autoComplete="off"
-                                                            />
-                                                        </div>
-                                                    </PopoverAnchor>
-                                                    <PopoverContent
-                                                        className="w-[var(--radix-popover-trigger-width)] p-0"
-                                                        align="start"
-                                                        sideOffset={4}
-                                                        onOpenAutoFocus={(e) => e.preventDefault()}
-                                                        onCloseAutoFocus={(e) => e.preventDefault()}
-                                                    >
-                                                        <Command
-                                                            shouldFilter={false}
-                                                            onPointerDown={(e) => e.preventDefault()}
-                                                        >
-                                                            <CommandList>
-                                                                <CommandEmpty>No places found.</CommandEmpty>
-                                                                <CommandGroup>
-                                                                    {placeSuggestions.map((e) => (
-                                                                        <CommandItem
-                                                                            key={`${e.name}\0${e.branch ?? ""}`}
-                                                                            value={`${e.name}\0${e.branch ?? ""}`}
-                                                                            onSelect={() => applyPlaceSuggestion(e)}
-                                                                        >
-                                                                            {formatRestaurantDisplayName({ name: e.name, branch: e.branch ?? "" })}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
+                                                <div className="relative">
+                                                    <Input
+                                                        ref={nameInputRef}
+                                                        id="name"
+                                                        value={name}
+                                                        onChange={(e) => {
+                                                            setName(e.target.value)
+                                                            setSelectedSuggestionIndex(-1)
+                                                        }}
+                                                        onFocus={() => setIsNameFocused(true)}
+                                                        onBlur={handleNameBlur}
+                                                        onKeyDown={handleNameKeyDown}
+                                                        placeholder="e.g., Sushi Masato (type to search local + Google)"
+                                                        required
+                                                        autoComplete="off"
+                                                    />
+                                                    {isSearchingPlaces && (
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {placeSuggestionsOpen && (
+                                                    <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover shadow-lg">
+                                                        {placeSuggestions.map((suggestion, index) => {
+                                                            const isLocal = suggestion.source === "local" && "entry" in suggestion
+                                                            const displayName = isLocal
+                                                                ? formatRestaurantDisplayName({
+                                                                    name: suggestion.name,
+                                                                    branch: suggestion.branch ?? "",
+                                                                })
+                                                                : suggestion.name
+                                                            const subtitle = suggestion.subtitle || suggestion.address || null
+
+                                                            return (
+                                                                <button
+                                                                    key={suggestion.id}
+                                                                    type="button"
+                                                                    className={cn(
+                                                                        "w-full px-3 py-2 text-left hover:bg-accent transition-colors",
+                                                                        index === selectedSuggestionIndex && "bg-accent"
+                                                                    )}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault()
+                                                                        ignoreBlurRef.current = true
+                                                                    }}
+                                                                    onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                                                                    onClick={() => void handleSelectSuggestion(suggestion)}
+                                                                >
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="truncate text-sm font-medium">{displayName}</span>
+                                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                                                            {isLocal ? "local" : "google"}
+                                                                        </span>
+                                                                    </div>
+                                                                    {subtitle && (
+                                                                        <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>
+                                                                    )}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div className="space-y-2 col-span-full">
@@ -1017,6 +1368,19 @@ export function FoodAddDialog({
                                                 </Select>
                                             </div>
                                         </div>
+                                        <div className="flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="gap-1"
+                                                onClick={() => setActiveTab("location")}
+                                                disabled={!isGeneralComplete}
+                                            >
+                                                Continue to {tabLabels.location}
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1025,14 +1389,40 @@ export function FoodAddDialog({
                                     <div className="space-y-4">
                                         <div className="space-y-2">
                                             <Label htmlFor="locationGoogleMapsUrl">Google Maps URL</Label>
-                                            <Input
-                                                id="locationGoogleMapsUrl"
-                                                value={googleMapsUrl}
-                                                onChange={(e) => setGoogleMapsUrl(e.target.value)}
-                                                placeholder="https://maps.google.com/..."
-                                                type="url"
-                                                className="w-full"
-                                            />
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    id="locationGoogleMapsUrl"
+                                                    value={googleMapsUrl}
+                                                    onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                                                    onPaste={(e) => {
+                                                        const pasted = e.clipboardData.getData("text")?.trim()
+                                                        if (pasted && isMapsUrl(pasted)) {
+                                                            e.preventDefault()
+                                                            setGoogleMapsUrl(pasted)
+                                                            void handleAutofill({ urlOverride: pasted })
+                                                        }
+                                                    }}
+                                                    placeholder="https://maps.google.com/..."
+                                                    type="url"
+                                                    className="w-full"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    className="shrink-0"
+                                                    onClick={() => void handleAutofill({ force: true })}
+                                                    disabled={!googleMapsUrl.trim() || isAutofilling}
+                                                >
+                                                    {isAutofilling ? (
+                                                        <>
+                                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                            Filling...
+                                                        </>
+                                                    ) : (
+                                                        "Fill"
+                                                    )}
+                                                </Button>
+                                            </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
@@ -1087,6 +1477,18 @@ export function FoodAddDialog({
                                                 />
                                             </div>
                                         </div>
+                                        <div className="flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="gap-1"
+                                                onClick={() => setActiveTab("items")}
+                                            >
+                                                Continue to {tabLabels.items}
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1104,6 +1506,18 @@ export function FoodAddDialog({
                                             onFavoriteChange={setFavoriteItem}
                                             availableCategories={availableItemCategories}
                                         />
+                                        <div className="flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="gap-1"
+                                                onClick={() => setActiveTab("ratings")}
+                                            >
+                                                Continue to {tabLabels.ratings}
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1184,6 +1598,18 @@ export function FoodAddDialog({
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                        <div className="flex justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="gap-1"
+                                                onClick={() => setActiveTab("notes")}
+                                            >
+                                                Continue to {tabLabels.notes}
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1214,22 +1640,35 @@ export function FoodAddDialog({
                         </ScrollArea>
 
                         {/* Footer */}
-                        <div className="border-t p-4 flex justify-between bg-muted/20 shrink-0 w-full z-10">
-                            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                                Cancel
-                            </Button>
-                            <Button onClick={handleSubmit} disabled={isSubmitting}>
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        Saving...
-                                    </>
-                                ) : isEditing ? (
-                                    "Update Entry"
-                                ) : (
-                                    "Add Entry"
-                                )}
-                            </Button>
+                        <div className="border-t p-4 bg-muted/20 shrink-0 w-full z-10 space-y-3">
+                            {isSubmitting && saveProgressLabel && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <span>{saveProgressLabel}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => handleOpenChange(false)}
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button onClick={handleSubmit} disabled={isSubmitting}>
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : isEditing ? (
+                                        "Update Entry"
+                                    ) : (
+                                        "Add Entry"
+                                    )}
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
