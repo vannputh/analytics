@@ -29,6 +29,9 @@ const WORKSPACES = {
   food: { label: "Food & Drinks", icon: Utensils, path: "/food" },
 } as const
 
+// Temporary gate: keep Food workspace code intact but disable switching into it from Media.
+const FOOD_WORKSPACE_ENABLED = false
+
 type WorkspaceKey = keyof typeof WORKSPACES
 
 interface PageHeaderProps {
@@ -145,7 +148,8 @@ export function PageHeader({ title, filterBar, openFoodAddDialog, onMediaAdded }
               variant="ghost"
               size="icon"
               onClick={() => {
-                const targetWorkspace = currentWorkspaceKey === "media" ? "food" : "media"
+                const targetWorkspace =
+                  currentWorkspaceKey === "media" && !FOOD_WORKSPACE_ENABLED ? "media" : currentWorkspaceKey === "media" ? "food" : "media"
                 router.push(`${WORKSPACES[targetWorkspace].path}/analytics`)
               }}
               className="h-8 w-8"
@@ -153,21 +157,27 @@ export function PageHeader({ title, filterBar, openFoodAddDialog, onMediaAdded }
               <CurrentIcon className="h-4 w-4" />
               <span className="sr-only">{currentWorkspace.label}</span>
             </Button>
-            <span className="text-muted-foreground">/</span>
-            {isDiaryPage ? (
-              <Link
-                href={`${currentWorkspace.path}/analytics`}
-                className="text-xs sm:text-sm font-mono uppercase tracking-wider hover:underline"
-              >
-                diary
-              </Link>
-            ) : isAnalyticsPage ? (
-              <Link
-                href={currentWorkspace.path}
-                className="text-xs sm:text-sm font-mono uppercase tracking-wider hover:underline"
-              >
-                analytics
-              </Link>
+            {(isDiaryPage || isAnalyticsPage) ? (
+              <div className="flex items-center rounded-md border p-0.5 text-[10px] sm:text-xs font-mono uppercase tracking-wider">
+                <Link
+                  href={currentWorkspace.path}
+                  className={cn(
+                    "px-2 sm:px-3 py-1 rounded-sm transition-colors",
+                    isDiaryPage ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  diary
+                </Link>
+                <Link
+                  href={`${currentWorkspace.path}/analytics`}
+                  className={cn(
+                    "px-2 sm:px-3 py-1 rounded-sm transition-colors",
+                    isAnalyticsPage ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  analytics
+                </Link>
+              </div>
             ) : (
               <h1 className="text-xs sm:text-sm font-mono uppercase tracking-wider">{title}</h1>
             )}

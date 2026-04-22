@@ -1,7 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import { UserProfile } from "@/lib/database.types"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -10,13 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Shield } from "lucide-react"
+import { Loader2, Shield } from "lucide-react"
+import { toast } from "sonner"
+import { updateUserAdminRole } from "@/lib/admin-actions"
 
 interface UsersTableProps {
   users: UserProfile[]
+  onUpdate: () => Promise<void>
 }
 
-export function UsersTable({ users }: UsersTableProps) {
+export function UsersTable({ users, onUpdate }: UsersTableProps) {
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null)
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved':
@@ -28,6 +35,21 @@ export function UsersTable({ users }: UsersTableProps) {
       default:
         return 'secondary'
     }
+  }
+
+  const handleToggleAdminRole = async (userId: string, currentValue: boolean) => {
+    setUpdatingRoleUserId(userId)
+    const result = await updateUserAdminRole(userId, !currentValue)
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to update admin role")
+      setUpdatingRoleUserId(null)
+      return
+    }
+
+    toast.success(!currentValue ? "Admin access granted" : "Admin access removed")
+    await onUpdate()
+    setUpdatingRoleUserId(null)
   }
 
   if (users.length === 0) {
@@ -76,6 +98,23 @@ export function UsersTable({ users }: UsersTableProps) {
                 Approved: {user.approved_at ? new Date(user.approved_at).toLocaleDateString() : "—"}
               </span>
             </div>
+            <div className="pt-1">
+              <Button
+                size="sm"
+                variant={user.is_admin ? "outline" : "default"}
+                className="font-mono text-xs w-full"
+                disabled={updatingRoleUserId === user.user_id}
+                onClick={() => handleToggleAdminRole(user.user_id, user.is_admin)}
+              >
+                {updatingRoleUserId === user.user_id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : user.is_admin ? (
+                  "Remove Admin"
+                ) : (
+                  "Make Admin"
+                )}
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -90,6 +129,7 @@ export function UsersTable({ users }: UsersTableProps) {
               <TableHead className="font-mono text-xs uppercase">Role</TableHead>
               <TableHead className="font-mono text-xs uppercase">Requested</TableHead>
               <TableHead className="font-mono text-xs uppercase">Approved</TableHead>
+              <TableHead className="font-mono text-xs uppercase text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -116,6 +156,23 @@ export function UsersTable({ users }: UsersTableProps) {
                 </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {user.approved_at ? new Date(user.approved_at).toLocaleDateString() : '-'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    size="sm"
+                    variant={user.is_admin ? "outline" : "default"}
+                    className="font-mono text-xs"
+                    disabled={updatingRoleUserId === user.user_id}
+                    onClick={() => handleToggleAdminRole(user.user_id, user.is_admin)}
+                  >
+                    {updatingRoleUserId === user.user_id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : user.is_admin ? (
+                      "Remove Admin"
+                    ) : (
+                      "Make Admin"
+                    )}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

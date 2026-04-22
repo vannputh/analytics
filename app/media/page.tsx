@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, Suspense, useEffect, useMemo } from "react"
+import { useState, Suspense, useEffect, useMemo, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MediaEntry } from "@/lib/database.types"
 import { applyFilters } from "@/lib/filter-types"
 import { MediaTable, COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-table"
-import { Input } from "@/components/ui/input"
 import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Search, X, Columns, CheckSquare, Shuffle } from "lucide-react"
+import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Columns, CheckSquare, Shuffle } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { MediaTableSkeleton } from "@/components/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -25,6 +24,23 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useColumnPreferences } from "@/hooks/useColumnPreferences"
 import { WatchThisDialog } from "@/components/watch-this-dialog"
+import { MovieDiaryStickyBar, MovieDiarySectionKey } from "@/components/media/MovieDiaryStickyBar"
+
+const matchesDiarySearch = (entry: MediaEntry, query: string) => {
+  const q = query.toLowerCase().trim()
+  if (!q) return true
+
+  if (entry.title?.toLowerCase().includes(q)) return true
+  if (entry.genre && Array.isArray(entry.genre) && entry.genre.some((g) => String(g).toLowerCase().includes(q))) return true
+  if (entry.platform?.toLowerCase().includes(q)) return true
+  if (entry.type?.toLowerCase().includes(q)) return true
+  if (entry.medium?.toLowerCase().includes(q)) return true
+  if (entry.language && Array.isArray(entry.language) && entry.language.some((l) => String(l).toLowerCase().includes(q))) return true
+  if (entry.status?.toLowerCase().includes(q)) return true
+  if (entry.season?.toLowerCase().includes(q)) return true
+
+  return false
+}
 
 function EntriesPageContent() {
   const router = useRouter()
@@ -54,22 +70,25 @@ function EntriesPageContent() {
     filterOptions
   } = useMediaFilters(allEntries)
 
-  const filteredWatched = useMemo(() => {
-    const withFilters = applyFilters(watchedEntries, filters)
-    if (!searchQuery.trim()) return withFilters
-    const q = searchQuery.toLowerCase().trim()
-    return withFilters.filter((entry) => {
-      if (entry.title?.toLowerCase().includes(q)) return true
-      if (entry.genre && Array.isArray(entry.genre) && entry.genre.some((g) => String(g).toLowerCase().includes(q))) return true
-      if (entry.platform?.toLowerCase().includes(q)) return true
-      if (entry.type?.toLowerCase().includes(q)) return true
-      if (entry.medium?.toLowerCase().includes(q)) return true
-      if (entry.language && Array.isArray(entry.language) && entry.language.some((l) => String(l).toLowerCase().includes(q))) return true
-      if (entry.status?.toLowerCase().includes(q)) return true
-      if (entry.season?.toLowerCase().includes(q)) return true
-      return false
-    })
-  }, [watchedEntries, filters, searchQuery])
+  const filteredWatching = useMemo(
+    () => watchingEntries.filter((entry) => matchesDiarySearch(entry, searchQuery)),
+    [watchingEntries, searchQuery]
+  )
+
+  const filteredWatched = useMemo(
+    () => applyFilters(watchedEntries, filters).filter((entry) => matchesDiarySearch(entry, searchQuery)),
+    [watchedEntries, filters, searchQuery]
+  )
+
+  const filteredPlanned = useMemo(
+    () => plannedEntries.filter((entry) => matchesDiarySearch(entry, searchQuery)),
+    [plannedEntries, searchQuery]
+  )
+
+  const filteredHoldAndDropped = useMemo(
+    () => holdAndDroppedEntries.filter((entry) => matchesDiarySearch(entry, searchQuery)),
+    [holdAndDroppedEntries, searchQuery]
+  )
 
   const { visibleColumns, toggleColumn } = useColumnPreferences()
 
@@ -79,11 +98,16 @@ function EntriesPageContent() {
   const [holdDroppedCollapsed, setHoldDroppedCollapsed] = useState(false)
   const [entryToOpenId, setEntryToOpenId] = useState<string | null>(null)
   const [watchThisEntry, setWatchThisEntry] = useState<MediaEntry | null>(null)
+  const [showStickyUtilityBar, setShowStickyUtilityBar] = useState(false)
+  const watchingSectionRef = useRef<HTMLElement | null>(null)
+  const watchedSectionRef = useRef<HTMLElement | null>(null)
+  const plannedSectionRef = useRef<HTMLElement | null>(null)
+  const holdDroppedSectionRef = useRef<HTMLElement | null>(null)
 
   const handlePickRandomPlanned = () => {
-    if (plannedEntries.length === 0) return
+    if (filteredPlanned.length === 0) return
     setPlannedCollapsed(false)
-    const random = plannedEntries[Math.floor(Math.random() * plannedEntries.length)]
+    const random = filteredPlanned[Math.floor(Math.random() * filteredPlanned.length)]
     if (random) setWatchThisEntry(random)
   }
 
@@ -94,6 +118,48 @@ function EntriesPageContent() {
       router.replace("/media")
     }
   }, [searchParams, router, refreshEntries])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowStickyUtilityBar(window.scrollY > 160)
+    }
+
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
+
+  const sectionJumps: Array<{ key: MovieDiarySectionKey; label: string }> = [
+    { key: "watching", label: "Watching" },
+    { key: "watched", label: "Watched" },
+    { key: "planned", label: "Planned" },
+    { key: "holdDropped", label: "On Hold & Dropped" },
+  ]
+
+  const scrollToSection = (section: MovieDiarySectionKey) => {
+    if (section === "watched") {
+      setWatchedCollapsed(false)
+    } else if (section === "planned") {
+      setPlannedCollapsed(false)
+    } else if (section === "holdDropped") {
+      setHoldDroppedCollapsed(false)
+    }
+
+    const sectionRef =
+      section === "watching"
+        ? watchingSectionRef
+        : section === "watched"
+          ? watchedSectionRef
+          : section === "planned"
+            ? plannedSectionRef
+            : holdDroppedSectionRef
+
+    window.setTimeout(() => {
+      if (!sectionRef.current) return
+      const y = sectionRef.current.getBoundingClientRect().top + window.scrollY - 170
+      window.scrollTo({ top: y, behavior: "smooth" })
+    }, 100)
+  }
 
   // Show full-screen loader only on initial load
   if (initialLoading) {
@@ -137,16 +203,31 @@ function EntriesPageContent() {
       )}
 
       {/* Header */}
-      <PageHeader title="Diary" onMediaAdded={refreshEntries} />
+      <PageHeader
+        title="Diary"
+        onMediaAdded={refreshEntries}
+        filterBar={
+          showStickyUtilityBar ? (
+            <MovieDiaryStickyBar
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              onJumpToSection={scrollToSection}
+              sectionJumps={sectionJumps}
+            />
+          ) : undefined
+        }
+      />
 
       {/* Main Content */}
       <main className="p-4 sm:p-6 relative">
-        <WatchingSection
-          entries={watchingEntries}
-          loading={watchingLoading}
-          onUpdate={handleWatchingEntryUpdate}
-          onDelete={handleDelete}
-        />
+        <section id="watching" ref={watchingSectionRef}>
+          <WatchingSection
+            entries={filteredWatching}
+            loading={watchingLoading}
+            onUpdate={handleWatchingEntryUpdate}
+            onDelete={handleDelete}
+          />
+        </section>
 
         {allEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -157,7 +238,7 @@ function EntriesPageContent() {
         ) : (
           <>
             {/* Watched (Diary) */}
-            <section className="mb-8">
+            <section id="watched" ref={watchedSectionRef} className="mb-8">
               <button
                 type="button"
                 className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
@@ -180,43 +261,15 @@ function EntriesPageContent() {
                 <>
                   {watchedEntries.length > 0 && (
                     <>
-                      <div className="sticky top-12 sm:top-14 z-40">
-                        <GlobalFilterBar
-                          filters={filters}
-                          onFiltersChange={setFilters}
-                          options={filterOptions}
-                          totalCount={watchedEntries.length}
-                          filteredCount={filteredWatched.length}
-                        />
-                      </div>
+                      <GlobalFilterBar
+                        filters={filters}
+                        onFiltersChange={setFilters}
+                        options={filterOptions}
+                        totalCount={watchedEntries.length}
+                        filteredCount={filteredWatched.length}
+                      />
                       <div className="mb-6 mt-4 space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
-                          <div className="relative flex-1 min-w-[150px]">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              type="text"
-                              placeholder="Search..."
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                }
-                              }}
-                              className="pl-10 pr-10"
-                            />
-                            {searchQuery && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                                onClick={() => setSearchQuery("")}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
                           <Button
                             variant={showSelectMode ? "secondary" : "outline"}
                             size="sm"
@@ -267,7 +320,7 @@ function EntriesPageContent() {
             </section>
 
             {/* Planned */}
-            <section className="mb-8">
+            <section id="planned" ref={plannedSectionRef} className="mb-8">
               <div className="flex items-center gap-2 mb-3">
                 <button
                   type="button"
@@ -281,11 +334,13 @@ function EntriesPageContent() {
                   )}
                   <ListTodo className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold">Planned</h2>
-                  {plannedEntries.length > 0 && (
-                    <span className="text-sm text-muted-foreground">({plannedEntries.length})</span>
+                {plannedEntries.length > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    ({filteredPlanned.length !== plannedEntries.length ? `${filteredPlanned.length} of ${plannedEntries.length}` : plannedEntries.length})
+                  </span>
                   )}
                 </button>
-                {plannedEntries.length > 0 && (
+                {filteredPlanned.length > 0 && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -300,7 +355,7 @@ function EntriesPageContent() {
               {!plannedCollapsed && (
                 <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
                   <MediaTable
-                    entries={plannedEntries}
+                    entries={filteredPlanned}
                     onDelete={handleDelete}
                     onEntryUpdate={updateEntryInList}
                     onRefresh={refreshEntries}
@@ -322,7 +377,7 @@ function EntriesPageContent() {
             />
 
             {/* On Hold & Dropped */}
-            <section>
+            <section id="hold-dropped" ref={holdDroppedSectionRef}>
               <button
                 type="button"
                 className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
@@ -336,13 +391,15 @@ function EntriesPageContent() {
                 <Pause className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-semibold">On Hold & Dropped</h2>
                 {holdAndDroppedEntries.length > 0 && (
-                  <span className="text-sm text-muted-foreground">({holdAndDroppedEntries.length})</span>
+                  <span className="text-sm text-muted-foreground">
+                    ({filteredHoldAndDropped.length !== holdAndDroppedEntries.length ? `${filteredHoldAndDropped.length} of ${holdAndDroppedEntries.length}` : holdAndDroppedEntries.length})
+                  </span>
                 )}
               </button>
               {!holdDroppedCollapsed && (
                 <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
                   <MediaTable
-                    entries={holdAndDroppedEntries}
+                    entries={filteredHoldAndDropped}
                     onDelete={handleDelete}
                     onEntryUpdate={updateEntryInList}
                     onRefresh={refreshEntries}
