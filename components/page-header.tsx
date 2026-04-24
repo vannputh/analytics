@@ -115,7 +115,7 @@ export function PageHeader({ title, filterBar, openFoodAddDialog, onMediaAdded }
         className="h-8 w-8 rounded-md bg-black text-white hover:bg-black/80"
       >
         <Sparkles className="h-4 w-4" />
-        <span className="sr-only">AI Assistant</span>
+        <span className="sr-only">Director</span>
       </Button>
 
       <Button
@@ -133,7 +133,7 @@ export function PageHeader({ title, filterBar, openFoodAddDialog, onMediaAdded }
   )
 
   return (
-    <div className="sticky top-0 z-50">
+    <div className="sticky top-0 z-50" data-sticky-bar>
       {/* Full header row — collapses when scrolled */}
       <header
         className={cn(

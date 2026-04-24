@@ -17,7 +17,7 @@ function revalidateAll() {
 
 export type ActionResponse<T> =
   | { success: true; data: T }
-  | { success: false; error: string }
+  | { success: false; error: string; duplicateEntry?: MediaEntry }
 
 export interface UniqueFieldValues {
   types: string[]
@@ -29,6 +29,37 @@ export interface UniqueFieldValues {
 
 export type CreateEntryInput = Partial<Omit<MediaEntry, 'id' | 'created_at' | 'updated_at'>> & { title: string }
 
+export async function getEntryByImdbId(imdbId: string): Promise<ActionResponse<MediaEntry | null>> {
+  try {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const { data, error } = await supabase
+      .from('media_entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('imdb_id', imdbId)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error checking imdb_id:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data: data ?? null }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
 export async function createEntry(data: CreateEntryInput): Promise<ActionResponse<MediaEntry>> {
   try {
     const supabase = await createClient()
@@ -38,6 +69,29 @@ export async function createEntry(data: CreateEntryInput): Promise<ActionRespons
     
     if (authError || !user) {
       return { success: false, error: 'Not authenticated' }
+    }
+
+    // Guard: reject duplicate imdb_id per user
+    if (data.imdb_id?.trim()) {
+      const { data: existing, error: checkError } = await supabase
+        .from('media_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('imdb_id', data.imdb_id.trim())
+        .maybeSingle()
+
+      if (checkError) {
+        console.error('Error checking duplicate imdb_id:', checkError)
+        return { success: false, error: checkError.message }
+      }
+
+      if (existing) {
+        return {
+          success: false,
+          error: 'DUPLICATE_IMDB_ID',
+          duplicateEntry: existing as MediaEntry,
+        }
+      }
     }
 
     // Add user_id to the data

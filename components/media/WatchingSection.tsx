@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronRight, PlayCircle } from "lucide-react"
+import { ChevronDown, PlayCircle } from "lucide-react"
 import { WatchingCard } from "@/components/watching-card"
 import { WatchingCardSkeleton } from "@/components/skeletons"
 import { MediaEntry } from "@/lib/database.types"
@@ -20,23 +20,20 @@ export function WatchingSection({ entries, loading, onUpdate, onDelete }: Watchi
 
     return (
         <div className="mb-6">
-            <button
-                type="button"
-                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
-                onClick={() => setCollapsed(!collapsed)}
-            >
-                {collapsed ? (
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
-                <PlayCircle className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Currently Watching</h2>
-                {entries.length > 0 && (
-                    <span className="text-sm text-muted-foreground">({entries.length})</span>
-                )}
-            </button>
-            {!collapsed && (
+        <button
+            type="button"
+            className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
+            onClick={() => setCollapsed(!collapsed)}
+        >
+            <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${collapsed ? "-rotate-90" : ""}`} />
+            <PlayCircle className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Currently Watching</h2>
+            {entries.length > 0 && (
+                <span className="text-sm text-muted-foreground">({entries.length})</span>
+            )}
+        </button>
+        <div className={`collapsible-panel ${collapsed ? "collapsible-closed" : "collapsible-open"}`}>
+            <div className="collapsible-inner">
                 <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
                     <div className="flex gap-3 sm:gap-4" style={{ minWidth: 'max-content' }}>
                         {loading ? (
@@ -58,7 +55,8 @@ export function WatchingSection({ entries, loading, onUpdate, onDelete }: Watchi
                         )}
                     </div>
                 </div>
-            )}
+            </div>
+        </div>
         </div>
     )
 }

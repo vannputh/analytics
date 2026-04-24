@@ -64,6 +64,14 @@ export async function POST(request: NextRequest) {
               action,
               entryId: result.data.id
             })
+          } else if ((result as any).duplicateEntry) {
+            // IMDb ID already exists — surface the existing entry ID so the caller can issue an update instead
+            results.push({
+              success: false,
+              action,
+              error: result.error,
+              entryId: (result as any).duplicateEntry.id
+            })
           } else {
             results.push({
               success: false,

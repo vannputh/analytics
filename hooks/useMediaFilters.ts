@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { FilterState, defaultFilterState, applyFilters, extractFilterOptions, areFiltersEqual } from "@/lib/filter-types"
 import { MediaEntry } from "@/lib/database.types"
 
@@ -37,6 +37,7 @@ function paramsToFilters(params: URLSearchParams): FilterState {
 export function useMediaFilters(allEntries: MediaEntry[]) {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const pathname = usePathname()
 
     const [filters, setFilters] = useState<FilterState>(defaultFilterState)
     const [searchQuery, setSearchQuery] = useState("")
@@ -87,10 +88,10 @@ export function useMediaFilters(allEntries: MediaEntry[]) {
         // Only clean update the URL if something changed
         if (newQueryString !== currentQueryString) {
             isUpdatingFromState.current = true
-            const newUrl = newQueryString ? `/media?${newQueryString}` : "/media"
+            const newUrl = newQueryString ? `${pathname}?${newQueryString}` : pathname
             router.replace(newUrl, { scroll: false })
         }
-    }, [filters, router, searchParams])
+    }, [filters, router, searchParams, pathname])
 
     // Debounce URL updates for search query to prevent page refresh on every keystroke
     useEffect(() => {
@@ -111,7 +112,7 @@ export function useMediaFilters(allEntries: MediaEntry[]) {
 
             if (newQueryString !== currentQueryString) {
                 isUpdatingFromState.current = true
-                const newUrl = newQueryString ? `/media?${newQueryString}` : "/media"
+                const newUrl = newQueryString ? `${pathname}?${newQueryString}` : pathname
                 router.replace(newUrl, { scroll: false })
             }
         }, 300) // 300ms debounce
@@ -122,7 +123,7 @@ export function useMediaFilters(allEntries: MediaEntry[]) {
                 clearTimeout(searchTimeoutRef.current)
             }
         }
-    }, [searchQuery, filters, router, searchParams])
+    }, [searchQuery, filters, router, searchParams, pathname])
 
     // Extract filter options from ALL data (not just displayed)
     const filterOptions = useMemo(() => extractFilterOptions(allEntries), [allEntries])

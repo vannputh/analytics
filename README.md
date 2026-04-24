@@ -57,6 +57,14 @@ Media Review is a full-stack web application that allows users to track and anal
 - **Poster Images**: Automatic poster/image fetching and display
 - **IMDB Integration**: Link entries to IMDB for additional metadata
 
+### 📖 Diary Layout
+
+- **Collapsible Sections**: Four independently collapsible diary sections — Currently Watching, Watched, Planned, and On Hold & Dropped
+- **Sticky Navigation Bar**: A compact `MovieDiaryStickyBar` appears when scrolling, containing a cross-section search box and section jump buttons with active-section highlighting
+- **Currently Watching Cards**: Visual card grid for in-progress titles with poster image, episode progress bar, +/− episode controls, date picker, and optimistic updates; auto-marks a title as Finished when all episodes are watched
+- **Random "Watch This" Picker**: A shuffle button in the Planned section randomly selects an entry and shows a `WatchThisDialog` with a plot synopsis fetched from TMDB
+- **Parallel Data Loading**: Watching entries are fetched in parallel with the full diary so the in-progress section renders immediately while the rest loads
+
 ### 🍽️ Food & Drinks Tracking
 
 - **Restaurant Tracking**: Track restaurant visits with location, cuisine, and ratings
@@ -113,8 +121,11 @@ Media Review is a full-stack web application that allows users to track and anal
 - **Toast Notifications**: User-friendly feedback for all actions
 - **Loading States**: Clear loading indicators during operations
 - **Error Handling**: Graceful error handling with user-friendly messages
-- **Skeleton Screens**: Loading placeholders for better perceived performance
+- **Skeleton Screens**: Loading placeholders for better perceived performance (`DiaryPageSkeleton`, `WatchingCardSkeleton`, `AnalyticsSkeleton`, `KPIGridSkeleton`, `ChartGridSkeleton`)
 - **Image Optimization**: Automatic image optimization and lazy loading
+- **Scroll-Aware Header**: Page header collapses on scroll; action buttons float over the sticky filter bar so they remain accessible at all times
+- **Diary/Analytics Tab Switcher**: Inline `diary | analytics` toggle replaces the page title when on main workspace pages
+- **Collapsible UI Panels**: CSS-driven collapsible panels (`collapsible-panel`, `collapsible-open/closed`, `collapsible-inner`) for smooth section expand/collapse animations
 
 ### 👥 User Management
 
@@ -141,7 +152,7 @@ Media Review is a full-stack web application that allows users to track and anal
 ┌───────────────────────▼───────────────────────────────────┐
 │                    Next.js Server                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
-│  │   API Routes │  │   Middleware │  │ Server       │    │
+│  │   API Routes │  │  proxy.ts    │  │ Server       │    │
 │  │              │  │   (Auth)     │  │ Actions      │    │
 │  └──────────────┘  └──────────────┘  └──────────────┘    │
 └───────────────────────┬───────────────────────────────────┘
@@ -236,13 +247,13 @@ Redirect to App ← Approval Check ← Profile Status ← Database Query
    - User clicks link, redirected to `/auth/callback`
 
 2. **Callback Processing**:
-   - Middleware validates session
+   - `proxy.ts` validates session (Next.js 16 convention, replaces `middleware.ts`)
    - Checks user profile status (`pending`, `approved`, `rejected`)
    - Only approved users can access the app
    - Session cookie is set
 
 3. **Session Management**:
-   - Middleware validates session on every request
+   - `proxy.ts` validates session on every request
    - Unauthenticated users redirected to `/login`
    - Session refreshed automatically by Supabase
 
@@ -524,7 +535,11 @@ Key configurations in `next.config.ts`:
 - **Image Optimization**: Remote patterns configured for Supabase and TMDB
 - **Package Optimization**: Tree-shaking for large libraries
 - **Server Actions**: Body size limit set to 10MB for file uploads
-- **Redirects**: Legacy route redirects (`/movies` → `/media`)
+- **Redirects**: Legacy route redirects (`/movies` → `/media`, `/entries` → `/media`, `/library` → `/media`, `/watching` → `/media/watching`)
+
+### Proxy (Auth)
+
+This project uses the **Next.js 16 proxy convention**: authentication and session validation is handled in `proxy.ts` at the project root (not `middleware.ts`). The exported function is named `proxy`, and the `config.matcher` works identically to the previous middleware convention. See `AGENTS.md` for details on the security rationale.
 
 ## Project Structure
 
@@ -599,7 +614,8 @@ media-review/
 │   │   └── Footer.tsx
 │   ├── media/                     # Media-specific components
 │   │   ├── forms/                 # Form sections
-│   │   ├── WatchingSection.tsx
+│   │   ├── WatchingSection.tsx    # Horizontal card strip for in-progress titles
+│   │   ├── MovieDiaryStickyBar.tsx # Sticky search + section-jump bar
 │   │   └── WatchedDiaryTable.tsx
 │   ├── shared/                    # Shared components
 │   │   ├── EntityTable.tsx
@@ -611,13 +627,16 @@ media-review/
 │   │   ├── input.tsx
 │   │   ├── table.tsx
 │   │   └── ... (other Radix UI wrappers)
-│   ├── ai-query-dialog.tsx        # AI query interface
+│   ├── ai-query-dialog.tsx        # AI query interface (Director)
 │   ├── ai-query-results.tsx       # AI results display
+│   ├── ai-action-confirmation-dialog.tsx # Human-in-the-loop AI action review
 │   ├── authenticated-layout.tsx   # Main app layout
 │   ├── food-add-dialog.tsx        # Food entry dialog
 │   ├── media-details-dialog.tsx    # Media entry dialog
 │   ├── media-table.tsx            # Media table component
-│   ├── page-header.tsx            # Page header with actions
+│   ├── page-header.tsx            # Scroll-aware header with diary/analytics tabs
+│   ├── watch-this-dialog.tsx      # Random planned entry detail dialog
+│   ├── watching-card.tsx          # In-progress title card with episode controls
 │   └── theme-provider.tsx         # Theme context provider
 ├── hooks/                         # Custom React hooks
 │   ├── useMediaEntries.ts         # Media entries data fetching
@@ -638,7 +657,7 @@ media-review/
 │   └── supabase/                  # Supabase client setup
 │       ├── client.ts              # Browser client
 │       └── server.ts              # Server client
-├── middleware.ts                  # Next.js middleware (auth)
+├── proxy.ts                       # Next.js 16 proxy (auth, replaces middleware.ts)
 ├── next.config.ts                 # Next.js configuration
 ├── tailwind.config.ts             # Tailwind CSS configuration
 ├── postcss.config.mjs             # PostCSS configuration
@@ -942,6 +961,21 @@ For TV shows, the application tracks individual episodes:
 
 ## Usage
 
+### Navigating the Diary
+
+The `/media` diary page is split into four collapsible sections:
+
+| Section | Contents |
+| --- | --- |
+| **Currently Watching** | Entries with status `Watching` — shown as visual cards |
+| **Watched** | Entries with status `Finished` — sortable/filterable table |
+| **Planned** | Entries with status `Plan to Watch` or `Planned` — table with random picker |
+| **On Hold & Dropped** | Entries with status `On Hold` or `Dropped` — table |
+
+Click any section header to collapse or expand it. When you scroll past the top, a **sticky bar** appears with a search box (searching across all sections simultaneously) and jump buttons to each section.
+
+**Random Planned Picker**: Click the shuffle icon next to the Planned section header to randomly select an entry. A dialog appears with the title, synopsis (fetched from TMDB), and an "Open in Diary" link.
+
 ### Adding Media Entries
 
 1. Navigate to the **Media** workspace (`/media`)
@@ -1019,12 +1053,18 @@ For TV shows, the application tracks individual episodes:
 
 ### Episode Tracking (TV Shows)
 
-1. Open a TV show entry
+**Via the Currently Watching cards (recommended):**
+1. Entries with status `Watching` appear as cards in the Currently Watching section
+2. Each card shows the poster, episode counter badge, and a progress bar
+3. Tap **+ Episode** to mark the next episode watched (optimistic update)
+4. Use the date button to backdate the watch to a specific day
+5. When `episodes_watched` reaches `episodes`, the entry is automatically marked `Finished`
+
+**Via the entry details dialog:**
+1. Open any entry's details dialog
 2. Navigate to the **"Watching"** tab
-3. Click **"Mark Episode Watched"**
-4. Select episode number and date
-5. Episode is added to watch history
-6. View timeline of watched episodes
+3. Use the `EpisodeTracker` grid to mark/unmark individual episodes
+4. View the `StatusHistoryTimeline` to see a chronological history of status changes
 
 ### Food Tracking
 
@@ -1425,4 +1465,4 @@ See [LICENSE](LICENSE) file for details.
 
 ---
 
-**Last Updated**: February 2026
+**Last Updated**: April 2026

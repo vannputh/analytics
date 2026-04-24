@@ -9,8 +9,7 @@ import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Button } from "@/components/ui/button"
 import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Columns, CheckSquare, Shuffle } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { MediaTableSkeleton } from "@/components/skeletons"
-import { Skeleton } from "@/components/ui/skeleton"
+import { DiaryPageSkeleton } from "@/components/skeletons"
 import { useMediaEntries } from "@/hooks/useMediaEntries"
 import { useMediaFilters } from "@/hooks/useMediaFilters"
 import { WatchingSection } from "@/components/media/WatchingSection"
@@ -98,7 +97,9 @@ function EntriesPageContent() {
   const [holdDroppedCollapsed, setHoldDroppedCollapsed] = useState(false)
   const [entryToOpenId, setEntryToOpenId] = useState<string | null>(null)
   const [watchThisEntry, setWatchThisEntry] = useState<MediaEntry | null>(null)
-  const [showStickyUtilityBar, setShowStickyUtilityBar] = useState(false)
+  const [activeSection, setActiveSection] = useState<MovieDiarySectionKey | null>(null)
+  const programmaticScrollRef = useRef(false)
+  const programmaticScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const watchingSectionRef = useRef<HTMLElement | null>(null)
   const watchedSectionRef = useRef<HTMLElement | null>(null)
   const plannedSectionRef = useRef<HTMLElement | null>(null)
@@ -120,10 +121,26 @@ function EntriesPageContent() {
   }, [searchParams, router, refreshEntries])
 
   useEffect(() => {
+    const HEADER_OFFSET = 170
+    const sectionRefs: Array<{ key: MovieDiarySectionKey; ref: React.RefObject<HTMLElement | null> }> = [
+      { key: "watching", ref: watchingSectionRef },
+      { key: "watched", ref: watchedSectionRef },
+      { key: "planned", ref: plannedSectionRef },
+      { key: "holdDropped", ref: holdDroppedSectionRef },
+    ]
     const handleScroll = () => {
-      setShowStickyUtilityBar(window.scrollY > 160)
+      if (programmaticScrollRef.current) return
+      let current: MovieDiarySectionKey | null = null
+      for (const { key, ref } of sectionRefs) {
+        if (!ref.current) continue
+        const rect = ref.current.getBoundingClientRect()
+        if (rect.top <= HEADER_OFFSET && rect.bottom > HEADER_OFFSET) {
+          current = key
+          break
+        }
+      }
+      setActiveSection(current)
     }
-
     handleScroll()
     window.addEventListener("scroll", handleScroll, { passive: true })
     return () => window.removeEventListener("scroll", handleScroll)
@@ -137,6 +154,10 @@ function EntriesPageContent() {
   ]
 
   const scrollToSection = (section: MovieDiarySectionKey) => {
+    setActiveSection(section)
+    programmaticScrollRef.current = true
+    if (programmaticScrollTimerRef.current) clearTimeout(programmaticScrollTimerRef.current)
+
     if (section === "watched") {
       setWatchedCollapsed(false)
     } else if (section === "planned") {
@@ -156,25 +177,24 @@ function EntriesPageContent() {
 
     window.setTimeout(() => {
       if (!sectionRef.current) return
-      const y = sectionRef.current.getBoundingClientRect().top + window.scrollY - 170
+      // When scrolled, the full header collapses and only the filter bar remains (~52px).
+      // Use the sticky container's actual height so the section title lands right below it.
+      const stickyEl = document.querySelector<HTMLElement>("[data-sticky-bar]")
+      const stickyHeight = stickyEl ? stickyEl.getBoundingClientRect().height : 56
+      const y = sectionRef.current.getBoundingClientRect().top + window.scrollY - stickyHeight - 8
       window.scrollTo({ top: y, behavior: "smooth" })
+      // Re-enable scroll detection after smooth scroll completes (~700ms)
+      programmaticScrollTimerRef.current = setTimeout(() => {
+        programmaticScrollRef.current = false
+      }, 800)
     }, 100)
   }
 
-  // Show full-screen loader only on initial load
   if (initialLoading) {
     return (
-      <div className="min-h-screen bg-background relative page-content">
+      <div className="min-h-screen bg-background page-content">
         <PageHeader title="Diary" onMediaAdded={refreshEntries} />
-        <main className="p-4 sm:p-6 relative">
-          <div className="mb-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-10 flex-1" />
-              <Skeleton className="h-10 w-24" />
-            </div>
-          </div>
-          <MediaTableSkeleton />
-        </main>
+        <DiaryPageSkeleton />
       </div>
     )
   }
@@ -194,7 +214,7 @@ function EntriesPageContent() {
     <div className="min-h-screen bg-background relative page-content">
       {/* Loading overlay for subsequent loads */}
       {loading && !initialLoading && (
-        <div className="fixed inset-0 bg-background/40 backdrop-blur-[2px] z-40 flex items-center justify-center pointer-events-none transition-opacity duration-200">
+        <div className="fixed inset-0 bg-background/40 backdrop-blur-[2px] z-40 flex items-center justify-center pointer-events-none animate-in fade-in duration-150">
           <div className="flex flex-col items-center gap-2 text-muted-foreground bg-background/90 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg border">
             <Loader2 className="h-5 w-5 animate-spin" />
             <p className="text-xs font-mono">Refreshing...</p>
@@ -207,14 +227,13 @@ function EntriesPageContent() {
         title="Diary"
         onMediaAdded={refreshEntries}
         filterBar={
-          showStickyUtilityBar ? (
-            <MovieDiaryStickyBar
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              onJumpToSection={scrollToSection}
-              sectionJumps={sectionJumps}
-            />
-          ) : undefined
+          <MovieDiaryStickyBar
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            onJumpToSection={scrollToSection}
+            sectionJumps={sectionJumps}
+            activeSection={activeSection}
+          />
         }
       />
 
@@ -244,11 +263,7 @@ function EntriesPageContent() {
                 className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
                 onClick={() => setWatchedCollapsed(!watchedCollapsed)}
               >
-                {watchedCollapsed ? (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
+                <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${watchedCollapsed ? "-rotate-90" : ""}`} />
                 <Calendar className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-semibold">Watched</h2>
                 {watchedEntries.length > 0 && (
@@ -257,8 +272,8 @@ function EntriesPageContent() {
                   </span>
                 )}
               </button>
-              {!watchedCollapsed && (
-                <>
+              <div className={`collapsible-panel ${watchedCollapsed ? "collapsible-closed" : "collapsible-open"}`}>
+                <div className="collapsible-inner">
                   {watchedEntries.length > 0 && (
                     <>
                       <GlobalFilterBar
@@ -315,8 +330,8 @@ function EntriesPageContent() {
                       diaryDateField="finish_date"
                     />
                   </div>
-                </>
-              )}
+                </div>
+              </div>
             </section>
 
             {/* Planned */}
@@ -327,17 +342,13 @@ function EntriesPageContent() {
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                   onClick={() => setPlannedCollapsed(!plannedCollapsed)}
                 >
-                  {plannedCollapsed ? (
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  )}
+                  <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${plannedCollapsed ? "-rotate-90" : ""}`} />
                   <ListTodo className="h-5 w-5 text-primary" />
                   <h2 className="text-lg font-semibold">Planned</h2>
-                {plannedEntries.length > 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    ({filteredPlanned.length !== plannedEntries.length ? `${filteredPlanned.length} of ${plannedEntries.length}` : plannedEntries.length})
-                  </span>
+                  {plannedEntries.length > 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      ({filteredPlanned.length !== plannedEntries.length ? `${filteredPlanned.length} of ${plannedEntries.length}` : plannedEntries.length})
+                    </span>
                   )}
                 </button>
                 {filteredPlanned.length > 0 && (
@@ -352,18 +363,20 @@ function EntriesPageContent() {
                   </Button>
                 )}
               </div>
-              {!plannedCollapsed && (
-                <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
-                  <MediaTable
-                    entries={filteredPlanned}
-                    onDelete={handleDelete}
-                    onEntryUpdate={updateEntryInList}
-                    onRefresh={refreshEntries}
-                    entryToOpenId={entryToOpenId}
-                    onOpenDetailsDone={() => setEntryToOpenId(null)}
-                  />
+              <div className={`collapsible-panel ${plannedCollapsed ? "collapsible-closed" : "collapsible-open"}`}>
+                <div className="collapsible-inner">
+                  <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
+                    <MediaTable
+                      entries={filteredPlanned}
+                      onDelete={handleDelete}
+                      onEntryUpdate={updateEntryInList}
+                      onRefresh={refreshEntries}
+                      entryToOpenId={entryToOpenId}
+                      onOpenDetailsDone={() => setEntryToOpenId(null)}
+                    />
+                  </div>
                 </div>
-              )}
+              </div>
             </section>
 
             <WatchThisDialog
@@ -383,11 +396,7 @@ function EntriesPageContent() {
                 className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
                 onClick={() => setHoldDroppedCollapsed(!holdDroppedCollapsed)}
               >
-                {holdDroppedCollapsed ? (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
+                <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${holdDroppedCollapsed ? "-rotate-90" : ""}`} />
                 <Pause className="h-5 w-5 text-primary" />
                 <h2 className="text-lg font-semibold">On Hold & Dropped</h2>
                 {holdAndDroppedEntries.length > 0 && (
@@ -396,16 +405,18 @@ function EntriesPageContent() {
                   </span>
                 )}
               </button>
-              {!holdDroppedCollapsed && (
-                <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
-                  <MediaTable
-                    entries={filteredHoldAndDropped}
-                    onDelete={handleDelete}
-                    onEntryUpdate={updateEntryInList}
-                    onRefresh={refreshEntries}
-                  />
+              <div className={`collapsible-panel ${holdDroppedCollapsed ? "collapsible-closed" : "collapsible-open"}`}>
+                <div className="collapsible-inner">
+                  <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
+                    <MediaTable
+                      entries={filteredHoldAndDropped}
+                      onDelete={handleDelete}
+                      onEntryUpdate={updateEntryInList}
+                      onRefresh={refreshEntries}
+                    />
+                  </div>
                 </div>
-              )}
+              </div>
             </section>
           </>
         )}
@@ -417,14 +428,9 @@ function EntriesPageContent() {
 export default function EntriesPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-background relative page-content">
+      <div className="min-h-screen bg-background page-content">
         <PageHeader title="Diary" />
-        <main className="p-4 sm:p-6 relative">
-          <div className="mb-6 space-y-4">
-            <Skeleton className="h-10 w-full" />
-          </div>
-          <MediaTableSkeleton />
-        </main>
+        <DiaryPageSkeleton />
       </div>
     }>
       <EntriesPageContent />

@@ -63,7 +63,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { updateEntry, createEntry, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
+import { updateEntry, createEntry, getEntryByImdbId, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -136,6 +136,15 @@ export function MediaDetailsDialog({
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    // Duplicate IMDb ID handling
+    // Set when createEntry detects an existing entry with the same imdb_id — dialog switches to edit mode for it.
+    const [duplicateRedirectEntry, setDuplicateRedirectEntry] = useState<MediaEntry | null>(null);
+    // Set on blur when the user types an imdb_id that already exists — shows an early warning inline.
+    const [duplicateWarning, setDuplicateWarning] = useState<MediaEntry | null>(null);
+
+    // The "effective" entry: either the prop entry (normal edit) or the one we redirected to on duplicate detection.
+    const effectiveEntry = entry ?? duplicateRedirectEntry;
+
     // --- Effects ---
 
     // Auto-calculate Time Taken
@@ -151,6 +160,74 @@ export function MediaDetailsDialog({
             }
         }
     }, [formData.start_date, formData.finish_date]);
+
+    // Reset duplicate state whenever the dialog opens fresh (new entry prop or re-open)
+    useEffect(() => {
+        if (open) {
+            setDuplicateRedirectEntry(null);
+            setDuplicateWarning(null);
+        }
+    }, [open, entry]);
+
+    // When a duplicate redirect entry is found, populate formData from it (same logic as prop entry init)
+    useEffect(() => {
+        if (!duplicateRedirectEntry) return;
+        let initialLanguage: string[] = [];
+        const val = duplicateRedirectEntry.language as unknown;
+        if (Array.isArray(val)) {
+            initialLanguage = val;
+        } else if (typeof val === "string") {
+            if (val.trim().startsWith("[")) {
+                try {
+                    const parsed = JSON.parse(val);
+                    if (Array.isArray(parsed)) initialLanguage = parsed;
+                    else initialLanguage = [val];
+                } catch {
+                    initialLanguage = [val];
+                }
+            } else {
+                initialLanguage = val.split(",").map((s: string) => s.trim().replace(/['"]+/g, ""));
+            }
+        }
+        initialLanguage = normalizeLanguage(initialLanguage);
+        const initial = {
+            title: duplicateRedirectEntry.title,
+            status: duplicateRedirectEntry.status,
+            episodes: duplicateRedirectEntry.episodes,
+            episodes_watched: duplicateRedirectEntry.episodes_watched || 0,
+            my_rating: duplicateRedirectEntry.my_rating,
+            poster_url: duplicateRedirectEntry.poster_url,
+            medium: duplicateRedirectEntry.medium,
+            type: duplicateRedirectEntry.type,
+            platform: duplicateRedirectEntry.platform,
+            season: duplicateRedirectEntry.season,
+            length: duplicateRedirectEntry.length,
+            language: initialLanguage,
+            genre: duplicateRedirectEntry.genre,
+            imdb_id: duplicateRedirectEntry.imdb_id,
+            start_date: duplicateRedirectEntry.start_date,
+            finish_date: duplicateRedirectEntry.finish_date,
+            last_watched_at: duplicateRedirectEntry.last_watched_at,
+            time_taken: duplicateRedirectEntry.time_taken,
+            average_rating: duplicateRedirectEntry.average_rating,
+            price: duplicateRedirectEntry.price,
+        };
+        setFormData(initial);
+        initialFormDataRef.current = JSON.stringify(initial);
+        setActiveTab("general");
+        loadStatusHistory(duplicateRedirectEntry.id);
+        if (duplicateRedirectEntry.episode_history) {
+            try {
+                const parsed = JSON.parse(JSON.stringify(duplicateRedirectEntry.episode_history)) as EpisodeWatchRecord[];
+                setEpisodeHistory(parsed.sort((a, b) => b.episode - a.episode));
+            } catch {
+                setEpisodeHistory([]);
+            }
+        } else {
+            setEpisodeHistory([]);
+        }
+        setNewEpisodeNumber((duplicateRedirectEntry.episodes_watched || 0) + 1);
+    }, [duplicateRedirectEntry]);
 
     // Load entry data
     useEffect(() => {
@@ -315,9 +392,9 @@ export function MediaDetailsDialog({
                 average_rating: formData.average_rating,
             };
 
-            if (entry) {
+            if (effectiveEntry) {
                 // Update existing entry
-                const result = await updateEntry(entry.id, payload);
+                const result = await updateEntry(effectiveEntry.id, payload);
                 if (result.success) {
                     toast.success("Entry updated");
                     onSuccess?.(result.data);
@@ -382,6 +459,12 @@ export function MediaDetailsDialog({
                     toast.success("Entry created");
                     initialFormDataRef.current = null;
                     onOpenChange(false);
+                } else if ((result as any).duplicateEntry) {
+                    // IMDb ID already exists in the library — switch dialog to edit the existing entry
+                    const existing = (result as any).duplicateEntry as MediaEntry;
+                    toast.info(`"${existing.title}" is already in your library. Switched to editing the existing entry.`);
+                    setDuplicateRedirectEntry(existing);
+                    setDuplicateWarning(null);
                 } else {
                     toast.error(result.error);
                 }
@@ -399,8 +482,8 @@ export function MediaDetailsDialog({
     };
 
     const handleDeleteConfirm = () => {
-        if (onDelete && entry) {
-            onDelete(entry.id);
+        if (onDelete && effectiveEntry) {
+            onDelete(effectiveEntry.id);
             initialFormDataRef.current = null;
             setShowDeleteConfirm(false);
             onOpenChange(false);
@@ -427,6 +510,7 @@ export function MediaDetailsDialog({
     };
 
     const handleIMDbIDChange = async (value: string) => {
+        setDuplicateWarning(null);
         setFormData(p => ({ ...p, imdb_id: value }));
         
         // Extract IMDB ID if URL was pasted
@@ -455,6 +539,14 @@ export function MediaDetailsDialog({
                     imdb_id: extracted,
                     medium: formData.medium || undefined,
                 }, "tmdb");
+            }
+
+            // For new entries only: check if this IMDb ID already exists in the library
+            if (!effectiveEntry) {
+                const check = await getEntryByImdbId(extracted);
+                if (check.success && check.data) {
+                    setDuplicateWarning(check.data);
+                }
             }
         }
     };
@@ -776,7 +868,7 @@ export function MediaDetailsDialog({
 
     // --- Render Helpers ---
 
-    const isNewEntry = !entry;
+    const isNewEntry = !effectiveEntry;
 
     return (
         <>
@@ -806,7 +898,7 @@ export function MediaDetailsDialog({
                                 {isNewEntry ? "Add New Entry" : formData.title}
                             </DialogTitle>
                             <DialogDescription className="text-sm text-muted-foreground mt-1">
-                                {!isNewEntry && entry?.start_date ? format(parseISO(entry.start_date), "yyyy") : (isNewEntry ? "Add a new media entry to your library" : "")}
+                                {!isNewEntry && effectiveEntry?.start_date ? format(parseISO(effectiveEntry.start_date), "yyyy") : (isNewEntry ? "Add a new media entry to your library" : "")}
                             </DialogDescription>
                         </div>
                     </div>
@@ -887,7 +979,7 @@ export function MediaDetailsDialog({
                                 {isNewEntry ? "Add New Entry" : formData.title}
                             </DialogTitle>
                             <DialogDescription className="text-sm text-muted-foreground">
-                                {!isNewEntry && entry?.start_date ? `Released in ${format(parseISO(entry.start_date), "yyyy")}` : (isNewEntry ? "Enter the details for the new media entry" : "")}
+                                {!isNewEntry && effectiveEntry?.start_date ? `Released in ${format(parseISO(effectiveEntry.start_date), "yyyy")}` : (isNewEntry ? "Enter the details for the new media entry" : "")}
                             </DialogDescription>
                         </DialogHeader>
 
@@ -982,6 +1074,25 @@ export function MediaDetailsDialog({
                                                 onBlur={handleIMDbIDBlur}
                                                 placeholder="tt1234567 or paste IMDB URL"
                                             />
+                                            {duplicateWarning && !effectiveEntry && (
+                                                <div className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-3 py-2 text-sm">
+                                                    <span className="text-amber-700 dark:text-amber-400">
+                                                        <strong>"{duplicateWarning.title}"</strong> already exists in your library ({duplicateWarning.status}).
+                                                    </span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="ml-3 shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-400 dark:hover:bg-amber-950"
+                                                        onClick={() => {
+                                                            setDuplicateRedirectEntry(duplicateWarning);
+                                                            setDuplicateWarning(null);
+                                                        }}
+                                                    >
+                                                        Edit existing
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Start Date */}
@@ -1196,7 +1307,7 @@ export function MediaDetailsDialog({
             open={showDeleteConfirm}
             onOpenChange={setShowDeleteConfirm}
             title="Delete entry?"
-            description={entry ? `This will permanently remove "${entry.title}" from your library. This action cannot be undone.` : ""}
+            description={effectiveEntry ? `This will permanently remove "${effectiveEntry.title}" from your library. This action cannot be undone.` : ""}
             confirmLabel="Delete"
             variant="destructive"
             onConfirm={handleDeleteConfirm}

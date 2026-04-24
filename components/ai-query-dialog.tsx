@@ -1,18 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowUp, Clapperboard, ChevronDown, ChevronUp, Code2, Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import { AIQueryResults } from "@/components/ai-query-results"
 import { AIActionConfirmationDialog } from "@/components/ai-action-confirmation-dialog"
 import { WorkspaceType } from "@/lib/ai-query-schemas"
@@ -20,6 +18,7 @@ import { validateActions, ValidatedAction } from "@/lib/ai-action-parser"
 import { MediaAction } from "@/lib/ai-action-parser"
 import { MediaEntry } from "@/lib/database.types"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 const MediaDetailsDialog = dynamic(
   () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
@@ -50,19 +49,34 @@ interface ActionResult {
   actions: MediaAction[]
 }
 
-const MEDIA_EXAMPLES = [
-  "How many movies did I watch in 2025?",
-  "Add Dune Part 3 to planned",
-  "Mark Inception as finished with 9/10",
-  "Show me all movies rated above 8",
-]
+interface Examples {
+  ask: string[]
+  do: string[]
+}
 
-const FOOD_EXAMPLES = [
-  "How much did I spend in January?",
-  "Add Blue Hill to my list",
-  "Top 5 highest rated restaurants",
-  "Delete McDonald's from my list",
-]
+const MEDIA_EXAMPLES: Examples = {
+  ask: [
+    "Movies watched in 2025",
+    "Top rated this year",
+    "What's still unwatched?",
+  ],
+  do: [
+    "Add Dune Part 3 to my watchlist",
+    "Mark Inception finished, rating 9/10",
+    "Delete Morbius from my list",
+  ],
+}
+
+const FOOD_EXAMPLES: Examples = {
+  ask: [
+    "How much did I spend in January?",
+    "Top 5 highest rated restaurants",
+  ],
+  do: [
+    "Add Blue Hill to my list",
+    "Delete McDonald's from my list",
+  ],
+}
 
 export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogProps) {
   const [query, setQuery] = useState("")
@@ -78,11 +92,25 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
     index: number
   } | null>(null)
   const [showMediaDialog, setShowMediaDialog] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const examples = workspace === "media" ? MEDIA_EXAMPLES : FOOD_EXAMPLES
+  const hasOutput = !!(result || error)
+
+  useEffect(() => {
+    if (!open || loading) return
+
+    const focusTimer = window.setTimeout(() => {
+      textareaRef.current?.focus()
+    }, 0)
+
+    return () => window.clearTimeout(focusTimer)
+  }, [open, loading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (loading) return
 
     if (!query.trim()) {
       toast.error("Please enter a question or request")
@@ -97,13 +125,8 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
     try {
       const response = await fetch("/api/ai-query", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query: query.trim(),
-          workspace,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim(), workspace }),
       })
 
       const data = await response.json()
@@ -114,23 +137,14 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
         return
       }
 
-      // Handle action response
       if (data.type === "action") {
-        setActionResult({
-          intent: data.intent,
-          actions: data.actions,
-        })
-
-        // Validate actions
+        setActionResult({ intent: data.intent, actions: data.actions })
         const validated = await validateActions(data.actions)
         setValidatedActions(validated)
-        
-        // Show confirmation dialog
         setShowConfirmation(true)
         return
       }
 
-      // Handle query response
       setResult({
         sql: data.sql,
         explanation: data.explanation,
@@ -138,7 +152,6 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
         metadata: data.metadata,
       })
 
-      // Show success message based on result count
       if (data.metadata.rowCount === 0) {
         toast.info("No results found for this query")
       }
@@ -156,6 +169,7 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
     setResult(null)
     setActionResult(null)
     setError(null)
+    textareaRef.current?.focus()
   }
 
   const handleReset = () => {
@@ -167,16 +181,24 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
     setShowConfirmation(false)
   }
 
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) handleReset()
+    onOpenChange(nextOpen)
+  }
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey) return
+    e.preventDefault()
+    if (loading || !query.trim()) return
+    e.currentTarget.form?.requestSubmit()
+  }
+
   const handleConfirmActions = async (selectedActions: ValidatedAction[]) => {
     try {
       const response = await fetch("/api/execute-actions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          actions: selectedActions.map(va => va.action),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actions: selectedActions.map(va => va.action) }),
       })
 
       const data = await response.json()
@@ -187,24 +209,18 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
       }
 
       const { summary } = data
-      
+
       if (summary.succeeded > 0) {
-        toast.success(`Successfully executed ${summary.succeeded} action${summary.succeeded > 1 ? 's' : ''}`)
+        toast.success(`Done — ${summary.succeeded} action${summary.succeeded > 1 ? "s" : ""} executed`)
       }
-      
       if (summary.failed > 0) {
-        toast.error(`${summary.failed} action${summary.failed > 1 ? 's' : ''} failed`)
+        toast.error(`${summary.failed} action${summary.failed > 1 ? "s" : ""} failed`)
       }
 
-      // Close confirmation dialog and reset
       setShowConfirmation(false)
       handleReset()
-      
-      // Trigger a refresh of the media list (the parent component should handle this)
-      // by closing and reopening the dialog
-      setTimeout(() => {
-        onOpenChange(false)
-      }, 500)
+
+      setTimeout(() => onOpenChange(false), 500)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error occurred"
       toast.error(errorMessage)
@@ -215,13 +231,12 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
   const handleEditAction = (action: ValidatedAction, index: number) => {
     setEditingAction({ action, index })
     setShowMediaDialog(true)
-    setShowConfirmation(false) // Hide confirmation while editing
+    setShowConfirmation(false)
   }
 
   const handleMediaDialogSuccess = (updatedEntry: MediaEntry) => {
     if (!editingAction) return
 
-    // Update the action data with edited values
     const updatedActions = [...validatedActions]
     updatedActions[editingAction.index] = {
       ...updatedActions[editingAction.index],
@@ -246,116 +261,117 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
           average_rating: updatedEntry.average_rating || undefined,
           season: updatedEntry.season || undefined,
           length: updatedEntry.length || undefined,
-        }
-      }
+        },
+      },
     }
 
     setValidatedActions(updatedActions)
     setShowMediaDialog(false)
-    setShowConfirmation(true) // Return to confirmation
+    setShowConfirmation(true)
     setEditingAction(null)
   }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-mono">
-              AI Assistant
-            </DialogTitle>
-            <DialogDescription className="font-mono text-xs">
-              Ask questions or manage your {workspace} entries
-            </DialogDescription>
-          </DialogHeader>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="sm:max-w-xl p-0 gap-0 flex flex-col max-h-[85vh] overflow-hidden">
+          {/* Accessible title/description (visually hidden — custom header below) */}
+          <DialogTitle className="sr-only">Director</DialogTitle>
+          <DialogDescription className="sr-only">
+            Your {workspace} agent — ask questions or give commands
+          </DialogDescription>
 
-          <div className="space-y-4">
-            {/* Query Input Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="query" className="text-sm font-mono">
-                  Message
-                </Label>
-                <Textarea
-                  id="query"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={`e.g., "${examples[0]}"`}
-                  className="min-h-[100px] font-mono text-sm"
-                  disabled={loading}
-                />
+          {/* Header */}
+          <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b shrink-0">
+            <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-foreground text-background shrink-0">
+              <Clapperboard className="h-3.5 w-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold font-mono leading-none tracking-tight">Director</p>
+              <p className="text-[11px] font-mono text-muted-foreground mt-0.5 leading-none">
+                Your {workspace} agent
+              </p>
+            </div>
+            {loading && (
+              <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                thinking
               </div>
+            )}
+          </div>
 
-              <div className="flex items-center gap-2">
-                <Button type="submit" disabled={loading || !query.trim()}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    "Submit"
-                  )}
-                </Button>
+          {/* Body — scrollable */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-4">
 
-                {(result || error) && (
-                  <Button type="button" variant="outline" onClick={handleReset}>
-                    Clear
-                  </Button>
-                )}
-              </div>
-            </form>
-
-            {/* Example Queries */}
-            {!result && !error && !loading && (
-              <div className="flex flex-wrap gap-2">
-                {examples.map((example, idx) => (
-                  <Button
-                    key={idx}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleExampleClick(example)}
-                    className="text-xs font-mono"
-                  >
-                    {example}
-                  </Button>
-                ))}
+            {/* Suggestion chips — idle state */}
+            {!hasOutput && !loading && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Ask</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {examples.ask.map((ex, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleExampleClick(ex)}
+                        className="text-xs font-mono px-3 py-1.5 rounded-full border border-border hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
+                      >
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Do</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {examples.do.map((ex, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleExampleClick(ex)}
+                        className="text-xs font-mono px-3 py-1.5 rounded-full border border-foreground/20 bg-foreground/5 hover:bg-foreground/10 transition-colors text-foreground/70 hover:text-foreground"
+                      >
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Error Display */}
+            {/* Error */}
             {error && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-                <p className="text-sm font-mono text-destructive">{error}</p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 flex items-start gap-3">
+                <span className="h-1.5 w-1.5 rounded-full bg-destructive mt-[5px] shrink-0" />
+                <p className="text-sm font-mono text-destructive leading-relaxed">{error}</p>
               </div>
             )}
 
-            {/* Results Display */}
+            {/* Results */}
             {result && (
-              <div className="space-y-4">
-                {/* SQL Query (Collapsible) */}
-                <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="space-y-3">
+                {/* SQL collapsible — minimal */}
+                <div className="rounded-lg border bg-muted/20 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setShowSQL(!showSQL)}
-                    className="flex w-full items-center justify-between text-sm font-mono text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <span>Generated SQL Query</span>
-                    {showSQL ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
+                    <Code2 className="h-3 w-3 shrink-0" />
+                    <span>SQL</span>
+                    <span className="ml-auto">
+                      {showSQL
+                        ? <ChevronUp className="h-3 w-3" />
+                        : <ChevronDown className="h-3 w-3" />}
+                    </span>
                   </button>
                   {showSQL && (
-                    <pre className="mt-2 overflow-x-auto rounded bg-background p-3 text-xs font-mono">
+                    <pre className="border-t px-3 pb-3 pt-2 text-[11px] font-mono overflow-x-auto leading-relaxed text-muted-foreground">
                       {result.sql}
                     </pre>
                   )}
                 </div>
 
-                {/* Results Visualization */}
                 {result.data.length > 0 ? (
                   <AIQueryResults
                     data={result.data}
@@ -363,19 +379,61 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
                     explanation={result.explanation}
                   />
                 ) : (
-                  <div className="rounded-lg border border-dashed p-8 text-center">
-                    <p className="text-sm font-mono text-muted-foreground">
-                      No results found for this query
-                    </p>
+                  <div className="rounded-xl border border-dashed px-6 py-10 text-center">
+                    <p className="text-sm font-mono text-muted-foreground">No results found</p>
                   </div>
                 )}
               </div>
             )}
           </div>
+
+          {/* Input — pinned bottom */}
+          <div className={cn("shrink-0 border-t px-4 py-3", hasOutput && "bg-muted/20")}>
+            <form onSubmit={handleSubmit}>
+              <div className="flex items-end gap-2">
+                <Textarea
+                  ref={textareaRef}
+                  id="query"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleTextareaKeyDown}
+                  placeholder={loading ? "" : "Ask a question or give a command…"}
+                  disabled={loading}
+                  rows={1}
+                  className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-xl border-input bg-background px-3 py-2.5 text-sm font-mono focus-visible:ring-1 leading-snug"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={loading || !query.trim()}
+                  className="h-10 w-10 rounded-xl shrink-0"
+                >
+                  {loading
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <ArrowUp className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between mt-1.5 px-0.5">
+                <p className="text-[10px] font-mono text-muted-foreground/50">
+                  ↵ send · ⇧↵ newline
+                </p>
+                {hasOutput && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    new
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Action Confirmation Dialog */}
+      {/* Action confirmation */}
       {actionResult && (
         <AIActionConfirmationDialog
           open={showConfirmation}
@@ -387,14 +445,14 @@ export function AIQueryDialog({ open, onOpenChange, workspace }: AIQueryDialogPr
         />
       )}
 
-      {/* Media Details Dialog for Editing */}
+      {/* Edit action entry */}
       {editingAction && (
         <MediaDetailsDialog
           open={showMediaDialog}
           onOpenChange={(open) => {
             setShowMediaDialog(open)
             if (!open) {
-              setShowConfirmation(true) // Return to confirmation if closed
+              setShowConfirmation(true)
               setEditingAction(null)
             }
           }}

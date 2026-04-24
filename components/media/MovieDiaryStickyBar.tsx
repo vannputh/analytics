@@ -1,10 +1,12 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
 export type MovieDiarySectionKey = "watching" | "watched" | "planned" | "holdDropped"
 
@@ -18,6 +20,7 @@ interface MovieDiaryStickyBarProps {
   onSearchQueryChange: (value: string) => void
   onJumpToSection: (section: MovieDiarySectionKey) => void
   sectionJumps: SectionJump[]
+  activeSection?: MovieDiarySectionKey | null
 }
 
 export function MovieDiaryStickyBar({
@@ -25,20 +28,27 @@ export function MovieDiaryStickyBar({
   onSearchQueryChange,
   onJumpToSection,
   sectionJumps,
+  activeSection,
 }: MovieDiaryStickyBarProps) {
   const hasSearch = searchQuery.trim().length > 0
+  const [isCompact, setIsCompact] = useState(false)
+
+  useEffect(() => {
+    const handleScroll = () => setIsCompact(window.scrollY > 10)
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   return (
-    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-      <div className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-3 overflow-x-auto scrollbar-hide">
-        <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground flex-shrink-0">
-          <Search className="h-3.5 w-3.5" />
-          <span className="text-xs font-mono uppercase tracking-wider">Search & Jump</span>
-        </div>
-
-        <Separator orientation="vertical" className="h-6 hidden sm:block" />
-
-        <div className="relative w-full min-w-[220px] sm:min-w-[260px] max-w-xl">
+    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 sm:py-3 overflow-x-auto scrollbar-hide transition-[padding] duration-200",
+          isCompact ? "pr-32 sm:pr-36" : ""
+        )}
+      >
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
@@ -65,14 +75,19 @@ export function MovieDiaryStickyBar({
           )}
         </div>
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="h-6 shrink-0" />
 
         {sectionJumps.map((section) => (
           <Button
             key={section.key}
             variant="ghost"
             size="sm"
-            className="h-8 px-2 shrink-0 text-xs font-mono uppercase tracking-wider"
+            className={cn(
+              "h-8 px-2 shrink-0 text-xs font-mono uppercase tracking-wider transition-colors",
+              activeSection === section.key
+                ? "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                : "text-muted-foreground hover:text-foreground"
+            )}
             onClick={() => onJumpToSection(section.key)}
           >
             {section.label}
