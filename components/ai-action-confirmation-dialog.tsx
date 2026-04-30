@@ -201,15 +201,29 @@ export function AIActionConfirmationDialog({
 
                       {/* Action details */}
                       {action.data && Object.keys(action.data).length > 1 && (
-                        <div className="text-xs font-mono text-muted-foreground space-y-1 ml-1">
-                          {Object.entries(action.data)
-                            .filter(([key]) => key !== "title")
-                            .map(([key, value]) => (
-                              <div key={key}>
-                                <span className="text-foreground/70">{key}:</span>{" "}
-                                {Array.isArray(value) ? value.join(", ") : String(value)}
+                        <div className="text-xs font-mono text-muted-foreground mt-2 ml-1">
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                            <div className="flex-1 space-y-1">
+                              {Object.entries(action.data)
+                                .filter(([key]) => key !== "title" && key !== "poster_url")
+                                .map(([key, value]) => (
+                                  <div key={key}>
+                                    <span className="text-foreground/70">{key}:</span>{" "}
+                                    {Array.isArray(value) ? value.join(", ") : String(value)}
+                                  </div>
+                                ))}
+                            </div>
+                            {action.data.poster_url && typeof action.data.poster_url === "string" && (
+                              <div className="shrink-0">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img 
+                                  src={action.data.poster_url} 
+                                  alt="Poster preview" 
+                                  className="w-16 h-24 sm:w-20 sm:h-32 rounded-md object-cover border shadow-sm bg-muted"
+                                />
                               </div>
-                            ))}
+                            )}
+                          </div>
                         </div>
                       )}
 

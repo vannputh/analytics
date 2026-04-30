@@ -319,6 +319,13 @@ export function MediaDetailsDialog({
         }
     }, [formData.finish_date]);
 
+    // When status is set to Plan to Watch or Planned, clear dates
+    useEffect(() => {
+        if (formData.status === "Plan to Watch" || formData.status === "Planned") {
+            setFormData(prev => ({ ...prev, start_date: null as any, finish_date: null as any, time_taken: null as any }));
+        }
+    }, [formData.status]);
+
     // When status is set to "Finished", auto-sync episodes_watched to episodes
     useEffect(() => {
         if (formData.status === "Finished" && formData.episodes && formData.episodes_watched !== formData.episodes) {

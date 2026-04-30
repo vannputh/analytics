@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { MediaEntry } from '@/lib/database.types'
 import { STATUS_OPTIONS, MEDIUM_OPTIONS, PLATFORM_OPTIONS } from '@/lib/types'
+import { getMetadata } from '@/lib/services/metadata-fetcher'
 
 export interface MediaAction {
   type: "create" | "update" | "delete"
@@ -43,8 +44,8 @@ export interface ValidatedAction {
 }
 
 /**
- * Enrich create action with TMDB metadata
- * Fetches metadata from TMDB API and merges with AI-provided data
+ * Enrich create action with metadata
+ * Fetches metadata and merges with AI-provided data
  */
 async function enrichCreateActionWithTMDB(action: MediaAction): Promise<MediaAction> {
   if (action.type !== "create" || !action.data?.title) {
@@ -52,39 +53,25 @@ async function enrichCreateActionWithTMDB(action: MediaAction): Promise<MediaAct
   }
 
   try {
-    // Build metadata fetch URL
-    const params = new URLSearchParams({
-      source: "tmdb",
+    const metadata = await getMetadata({
       title: action.data.title,
-    })
+      type: action.data.medium === "Movie" ? "movie" : action.data.medium ? "tv" : undefined,
+    });
     
-    if (action.data.medium) {
-      params.append("type", action.data.medium === "Movie" ? "movie" : "tv")
-    }
-
-    // Fetch metadata from API
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const response = await fetch(`${baseUrl}/api/metadata?${params}`, {
-      cache: 'no-store'
-    })
-    
-    if (!response.ok) {
-      console.log(`TMDB fetch failed for "${action.data.title}": ${response.status}`)
-      return action
-    }
-
-    const metadata = await response.json()
-    
-    // Merge TMDB data with AI-provided data (AI data takes precedence)
-    return {
-      ...action,
-      data: {
-        ...metadata, // TMDB data first (defaults)
-        ...action.data, // AI data overrides
+    // Merge AI data with metadata. AI data takes precedence only if it has a truthy or explicit value.
+    const mergedData = { ...metadata };
+    for (const [key, value] of Object.entries(action.data)) {
+      if (value !== null && value !== undefined && value !== "") {
+        mergedData[key] = value;
       }
     }
+
+    return {
+      ...action,
+      data: mergedData
+    }
   } catch (error) {
-    console.error("Failed to fetch TMDB metadata:", error)
+    console.error("Failed to fetch metadata:", error)
     return action // Return original action on error
   }
 }
@@ -188,6 +175,10 @@ async function validateAction(action: MediaAction): Promise<ValidatedAction> {
     const validStatuses = STATUS_OPTIONS as readonly string[]
     if (!validStatuses.includes(action.data.status)) {
       errors.push(`Invalid status: ${action.data.status}. Must be one of: ${validStatuses.join(', ')}`)
+    } else if (action.data.status === "Plan to Watch" || action.data.status === "Planned") {
+      // Clear dates when planned to watch
+      action.data.start_date = null as any;
+      action.data.finish_date = null as any;
     }
   }
 
