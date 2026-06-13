@@ -242,10 +242,16 @@ export async function updateFoodEntry(id: string, data: FoodEntryUpdate): Promis
     try {
         const supabase = await createClient()
 
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
         const { data: updatedEntry, error } = await (supabase
             .from('food_entries' as any) as any)
             .update(data)
             .eq('id', id)
+            .eq('user_id', user.id)
             .select()
             .single()
 
@@ -271,6 +277,11 @@ export async function deleteFoodEntry(id: string): Promise<ActionResponse<void>>
     try {
         const supabase = await createClient()
 
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
         // First, get all images to delete from storage
         const { data: images } = await (supabase
             .from('food_entry_images' as any) as any)
@@ -288,6 +299,7 @@ export async function deleteFoodEntry(id: string): Promise<ActionResponse<void>>
             .from('food_entries' as any) as any)
             .delete()
             .eq('id', id)
+            .eq('user_id', user.id)
 
         if (error) {
             console.error('Error deleting food entry:', error)
@@ -513,11 +525,17 @@ export async function deleteFoodEntryImage(imageId: string): Promise<ActionRespo
     try {
         const supabase = await createClient()
 
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
         // Get image path first
         const { data: image } = await (supabase
             .from('food_entry_images' as any) as any)
             .select('storage_path')
             .eq('id', imageId)
+            .eq('user_id', user.id)
             .single()
 
         if (image) {
@@ -530,6 +548,7 @@ export async function deleteFoodEntryImage(imageId: string): Promise<ActionRespo
             .from('food_entry_images' as any) as any)
             .delete()
             .eq('id', imageId)
+            .eq('user_id', user.id)
 
         if (error) {
             console.error('Error deleting food entry image:', error)
@@ -553,17 +572,24 @@ export async function setFoodEntryPrimaryImage(imageId: string, entryId: string)
     try {
         const supabase = await createClient()
 
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) {
+            return { success: false, error: 'Not authenticated' }
+        }
+
         // Unset all primary images for this entry
         await (supabase
             .from('food_entry_images' as any) as any)
             .update({ is_primary: false })
             .eq('food_entry_id', entryId)
+            .eq('user_id', user.id)
 
         // Set the new primary image
         const { error } = await (supabase
             .from('food_entry_images' as any) as any)
             .update({ is_primary: true })
             .eq('id', imageId)
+            .eq('user_id', user.id)
 
         if (error) {
             console.error('Error setting primary image:', error)

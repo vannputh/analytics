@@ -1,9 +1,6 @@
-// Legacy export for backward compatibility
-// Use createClient from @/lib/supabase/client in new code
-import { createBrowserClient } from "@supabase/ssr"
-import { Database } from "./database.types"
+// Legacy export for backward compatibility.
+// Use createClient from @/lib/supabase/client in new code.
+// Delegates to the memoized client so the whole app shares one browser instance.
+import { createClient } from "./supabase/client"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient()

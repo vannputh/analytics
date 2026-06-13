@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeLanguage } from '@/lib/language-utils'
+import { requireAuth } from '@/lib/api-auth'
 
 const OMDB_API_KEY = process.env.OMDB_API_KEY
 
@@ -31,6 +32,9 @@ export interface OMDBResponse {
 
 export async function GET(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth()
+    if (unauthorized) return unauthorized
+
     const searchParams = request.nextUrl.searchParams
     const title = searchParams.get('title')
     const year = searchParams.get('year')

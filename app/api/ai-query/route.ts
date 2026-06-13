@@ -3,6 +3,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createClient } from "@/lib/supabase/server"
 import { buildSystemPrompt, buildActionPrompt, shouldUseActionMode, WorkspaceType } from "@/lib/ai-query-schemas"
 import { normalizeGeminiError } from "@/lib/gemini-errors"
+import { validateSQL } from "@/lib/sql-validation"
+import { rateLimit } from "@/lib/rate-limit"
 
 export interface AIQueryRequest {
   query: string
@@ -47,44 +49,6 @@ export interface AIQueryResponse {
   intent?: string
   actions?: MediaAction[]
   error?: string
-}
-
-// Validate SQL is read-only
-function validateSQL(sql: string): { valid: boolean; error?: string } {
-  const sqlUpper = sql.toUpperCase()
-
-  // Check for dangerous operations
-  const dangerousOperations = [
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "DROP",
-    "ALTER",
-    "CREATE",
-    "TRUNCATE",
-    "GRANT",
-    "REVOKE",
-    "EXECUTE",
-  ]
-
-  for (const op of dangerousOperations) {
-    if (sqlUpper.includes(op)) {
-      return {
-        valid: false,
-        error: `SQL contains forbidden operation: ${op}. Only SELECT queries are allowed.`,
-      }
-    }
-  }
-
-  // Must start with SELECT (after trimming whitespace)
-  if (!sqlUpper.trim().startsWith("SELECT")) {
-    return {
-      valid: false,
-      error: "Query must start with SELECT",
-    }
-  }
-
-  return { valid: true }
 }
 
 // Determine visualization type based on query results
@@ -185,6 +149,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Invalid workspace. Must be 'media' or 'food'" },
         { status: 400 }
+      )
+    }
+
+    // Require an authenticated user before spending Gemini tokens / running SQL.
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      )
+    }
+
+    // Throttle per user to blunt accidental/abusive bursts against the paid model.
+    const { allowed, retryAfterSec } = rateLimit(`ai-query:${user.id}`, 20, 60_000)
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: `Too many requests. Try again in ${retryAfterSec}s.` },
+        { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
       )
     }
 
@@ -322,11 +305,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Execute SQL query using Supabase
-    const supabase = await createClient()
-
-    // Use Supabase's rpc function to execute raw SQL
-    // This requires a database function to be created in Supabase
+    // Execute SQL query using Supabase (reuses the authenticated client above).
+    // Use Supabase's rpc function to execute raw SQL.
+    // This requires a database function to be created in Supabase.
     const { data: queryData, error: queryError } = await supabase.rpc("execute_sql_query", {
       query_text: parsed.sql,
     })

@@ -61,7 +61,7 @@ export default function FoodPage() {
             <PageHeader title="Food & Drinks" openFoodAddDialog={handleAddEntry} />
 
             {/* Main Content */}
-            <main className="p-4 sm:p-6">
+            <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 outline-none">
                 <FoodCalendarView
                     onAddEntry={handleAddEntry}
                     onViewEntry={handleViewEntry}

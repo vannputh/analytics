@@ -200,6 +200,13 @@ export function PageHeader({ title, filterBar, openFoodAddDialog, onMediaAdded }
         </div>
       )}
 
+      {/* No filter bar: float the actions when scrolled so Add / AI / Profile never disappear */}
+      {!filterBar && isScrolled && (
+        <div className="absolute right-2 top-2 z-10 flex items-center rounded-md bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-1 py-1 shadow-sm">
+          {actionButtons}
+        </div>
+      )}
+
       {/* Dialogs — always mounted so state is preserved when header is collapsed */}
       <MediaDetailsDialog
         open={showMediaDialog}

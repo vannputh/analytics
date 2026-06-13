@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchOMDB } from "@/lib/services/omdb";
+import { requireAuth } from "@/lib/api-auth";
 
 // Extended TMDB search types
 interface TMDBSearchResult {
@@ -81,6 +82,9 @@ async function searchOMDBFallback(query: string, apiKey: string): Promise<Search
 
 export async function GET(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth();
+    if (unauthorized) return unauthorized;
+
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get("q");
     

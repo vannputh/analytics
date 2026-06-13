@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   // Enable compression for smaller responses
   compress: true,
 
+  // Strip console.* (except errors) from production bundles
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error"] } : false,
+  },
+
   // Optimize package imports for better tree-shaking
   experimental: {
     serverActions: {

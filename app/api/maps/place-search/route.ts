@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { FoodPlaceSearchResponse, FoodPlaceSuggestion } from "@/lib/food-place-types";
+import { requireAuth } from "@/lib/api-auth";
 
 interface GoogleAddressComponent {
   longText?: string;
@@ -45,6 +46,9 @@ function getCityAndCountry(components: GoogleAddressComponent[] | undefined): {
 
 export async function GET(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth();
+    if (unauthorized) return unauthorized;
+
     const q = request.nextUrl.searchParams.get("q")?.trim() || "";
     if (q.length < 2) {
       return NextResponse.json<FoodPlaceSearchResponse>({ results: [] });

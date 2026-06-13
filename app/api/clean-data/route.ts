@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { normalizeGeminiError } from "@/lib/gemini-errors"
+import { requireAuth } from "@/lib/api-auth"
 
 const SYSTEM_INSTRUCTION = `You are a strict data cleaner for a media tracking application. Your job is to normalize messy CSV data into a clean, structured JSON format.
 
@@ -57,6 +58,9 @@ IMPORTANT: Return ONLY the raw JSON object. No markdown formatting, no code bloc
 
 export async function POST(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth()
+    if (unauthorized) return unauthorized
+
     const { csvData } = await request.json()
 
     if (!csvData || typeof csvData !== "string") {

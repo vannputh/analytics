@@ -5,14 +5,11 @@ import { MediaEntry, MediaStatusHistory } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 import { normalizeLanguage } from '@/lib/language-utils'
 
-/** Revalidate all common paths after data mutations */
+/** Revalidate the paths that actually render media entries after a mutation. */
 function revalidateAll() {
   revalidatePath('/')
-  revalidatePath('/dashboard')
   revalidatePath('/media')
   revalidatePath('/media/analytics')
-  revalidatePath('/analytics')
-  revalidatePath('/books')
 }
 
 export type ActionResponse<T> =
@@ -127,10 +124,16 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>): 
   try {
     const supabase = await createClient()
 
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
     const { data: updatedEntry, error } = await (supabase
       .from('media_entries' as any) as any)
       .update(data)
       .eq('id', id)
+      .eq('user_id', user.id)
       .select()
       .single()
 
@@ -180,10 +183,16 @@ export async function deleteEntry(id: string): Promise<ActionResponse<void>> {
   try {
     const supabase = await createClient()
 
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
     const { error } = await supabase
       .from('media_entries')
       .delete()
       .eq('id', id)
+      .eq('user_id', user.id)
 
     if (error) {
       console.error('Error deleting entry:', error)
@@ -455,11 +464,17 @@ export async function restartEntry(id: string): Promise<ActionResponse<MediaEntr
   try {
     const supabase = await createClient()
 
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
     // Get current entry
     const { data: entry, error: fetchError } = await (supabase
       .from('media_entries' as any) as any)
       .select('*')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single()
 
     if (fetchError || !entry) {
@@ -483,6 +498,7 @@ export async function restartEntry(id: string): Promise<ActionResponse<MediaEntr
         start_date: entry.start_date || new Date().toISOString().split('T')[0],
       } as any)
       .eq('id', id)
+      .eq('user_id', user.id)
       .select()
       .single()
 

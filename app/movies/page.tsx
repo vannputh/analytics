@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, Suspense, useEffect, useMemo, useRef } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 import { MediaEntry } from "@/lib/database.types"
 import { applyFilters } from "@/lib/filter-types"
 import { MediaTable, COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-table"
@@ -24,6 +26,11 @@ import {
 import { useColumnPreferences } from "@/hooks/useColumnPreferences"
 import { WatchThisDialog } from "@/components/watch-this-dialog"
 import { MovieDiaryStickyBar, MovieDiarySectionKey } from "@/components/media/MovieDiaryStickyBar"
+
+const MediaDetailsDialog = dynamic(
+  () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+  { ssr: false }
+)
 
 const matchesDiarySearch = (entry: MediaEntry, query: string) => {
   const q = query.toLowerCase().trim()
@@ -98,13 +105,17 @@ function EntriesPageContent() {
   const [entryToOpenId, setEntryToOpenId] = useState<string | null>(null)
   const [watchThisEntry, setWatchThisEntry] = useState<MediaEntry | null>(null)
   const [showStickyUtilityBar, setShowStickyUtilityBar] = useState(false)
+  const [showAddDialog, setShowAddDialog] = useState(false)
   const watchingSectionRef = useRef<HTMLElement | null>(null)
   const watchedSectionRef = useRef<HTMLElement | null>(null)
   const plannedSectionRef = useRef<HTMLElement | null>(null)
   const holdDroppedSectionRef = useRef<HTMLElement | null>(null)
 
   const handlePickRandomPlanned = () => {
-    if (filteredPlanned.length === 0) return
+    if (filteredPlanned.length === 0) {
+      toast.message("No planned items match your filters.")
+      return
+    }
     setPlannedCollapsed(false)
     const random = filteredPlanned[Math.floor(Math.random() * filteredPlanned.length)]
     if (random) setWatchThisEntry(random)
@@ -172,9 +183,12 @@ function EntriesPageContent() {
   if (error && allEntries.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-destructive">
-          <AlertCircle className="h-8 w-8" />
-          <p className="text-sm font-mono">{error}</p>
+        <div className="flex flex-col items-center gap-3">
+          <AlertCircle className="h-8 w-8 text-destructive" />
+          <p className="text-sm font-mono text-destructive">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => refreshEntries()}>
+            Try again
+          </Button>
         </div>
       </div>
     )
@@ -209,7 +223,7 @@ function EntriesPageContent() {
       />
 
       {/* Main Content */}
-      <main className="p-4 sm:p-6 relative">
+      <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 relative outline-none">
         <section id="watching" ref={watchingSectionRef}>
           <WatchingSection
             entries={filteredWatching}
@@ -223,7 +237,8 @@ function EntriesPageContent() {
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <Calendar className="h-12 w-12 opacity-30 mb-4" />
             <p className="text-sm font-mono mb-3">No entries yet</p>
-            <p className="text-sm text-center mb-4">Use the + button in the header to add your first entry</p>
+            <p className="text-sm text-center mb-4">Start tracking the films, shows, books, and games you care about.</p>
+            <Button onClick={() => setShowAddDialog(true)}>Add your first entry</Button>
           </div>
         ) : (
           <>
@@ -322,13 +337,14 @@ function EntriesPageContent() {
                     </span>
                   )}
                 </button>
-                {filteredPlanned.length > 0 && (
+                {plannedEntries.length > 0 && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0"
                     onClick={handlePickRandomPlanned}
                     title="Pick random to watch"
+                    aria-label="Pick a random planned item to watch"
                   >
                     <Shuffle className="h-4 w-4" />
                   </Button>
@@ -391,6 +407,16 @@ function EntriesPageContent() {
             </section>
           </>
         )}
+
+        <MediaDetailsDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          entry={null}
+          onSuccess={() => {
+            setShowAddDialog(false)
+            refreshEntries()
+          }}
+        />
       </main>
     </div>
   )

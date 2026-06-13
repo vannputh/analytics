@@ -26,7 +26,7 @@ export function Features() {
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="space-y-3 text-left">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            why analytics
+            why analythika
           </p>
           <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
             minimal, on purpose

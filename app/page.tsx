@@ -19,7 +19,7 @@ export default function LandingPage() {
     <ThemeProvider>
       <div className="min-h-screen flex flex-col">
         <Navbar onRequestAccess={handleRequestAccess} onLogin={handleLogin} />
-        <main className="flex-1 pt-16">
+        <main id="main-content" tabIndex={-1} className="flex-1 pt-16 outline-none">
           <Hero onRequestAccess={handleRequestAccess} onLogin={handleLogin} />
           <Features />
         </main>

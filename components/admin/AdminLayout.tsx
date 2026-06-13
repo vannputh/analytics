@@ -50,9 +50,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 outline-none">
         {children}
-      </div>
+      </main>
     </div>
   )
 }

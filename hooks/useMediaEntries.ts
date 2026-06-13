@@ -1,26 +1,22 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { toast } from "sonner"
 import { getEntries, deleteEntry } from "@/lib/actions"
-import { MediaEntry } from "@/lib/database.types"
-import { createClient } from "@/lib/supabase/client"
+import type { MediaEntry } from "@/lib/database.types"
 
 export function useMediaEntries() {
     const [allEntries, setAllEntries] = useState<MediaEntry[]>([])
-    const [watchingEntries, setWatchingEntries] = useState<MediaEntry[]>([])
-    const [watchingLoading, setWatchingLoading] = useState(true)
     const [loading, setLoading] = useState(true)
     const [initialLoading, setInitialLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const supabase = createClient()
 
-    const fetchEntries = async (isInitial = false) => {
+    const fetchEntries = useCallback(async (isInitial = false) => {
         try {
             setLoading(true)
             setError(null)
 
-            const result = await getEntries({ getCount: true })
+            const result = await getEntries()
 
             if (!result.success) {
                 throw new Error(result.error || "Failed to load entries")
@@ -38,61 +34,11 @@ export function useMediaEntries() {
                 setInitialLoading(false)
             }
         }
-    }
-
-    const fetchWatchingEntries = async () => {
-        try {
-            setWatchingLoading(true)
-            const { data, error } = await supabase
-                .from("media_entries")
-                .select("*")
-                .eq("status", "Watching")
-                .order("last_watched_at", { ascending: false })
-                .order("updated_at", { ascending: false })
-
-            if (error) throw error
-            setWatchingEntries(data || [])
-        } catch (error) {
-            console.error("Error fetching watching entries:", error)
-        } finally {
-            setWatchingLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        let isMounted = true
-
-        const init = async () => {
-            await Promise.all([
-                fetchEntries(true),
-                fetchWatchingEntries()
-            ])
-        }
-
-        init()
-
-        return () => {
-            isMounted = false
-        }
     }, [])
 
-    const handleWatchingEntryUpdate = (updatedEntry: MediaEntry) => {
-        setWatchingEntries(prev => {
-            // If the entry is finished or dropped, remove it from the watching list
-            if (updatedEntry.status !== "Watching") {
-                return prev.filter(e => e.id !== updatedEntry.id)
-            }
-            // Otherwise update it and re-sort
-            return prev.map(e => e.id === updatedEntry.id ? updatedEntry : e)
-                .sort((a, b) => {
-                    const dateA = a.last_watched_at ? new Date(a.last_watched_at).getTime() : 0
-                    const dateB = b.last_watched_at ? new Date(b.last_watched_at).getTime() : 0
-                    return dateB - dateA
-                })
-        })
-        // Also update in allEntries if present
-        updateEntryInList(updatedEntry)
-    }
+    useEffect(() => {
+        fetchEntries(true)
+    }, [fetchEntries])
 
     const updateEntryInList = (updatedEntry: MediaEntry) => {
         setAllEntries(prev =>
@@ -115,6 +61,24 @@ export function useMediaEntries() {
             toast.error(err instanceof Error ? err.message : "Failed to delete entry")
         }
     }
+
+    // All status buckets are derived from the single allEntries fetch. Previously
+    // "Watching" rows were fetched a second time directly from Supabase even though
+    // they're already present here — that extra round-trip is now gone.
+    const watchingEntries = useMemo(
+        () =>
+            allEntries
+                .filter((e) => e.status === "Watching")
+                .sort((a, b) => {
+                    const aWatched = a.last_watched_at ? new Date(a.last_watched_at).getTime() : 0
+                    const bWatched = b.last_watched_at ? new Date(b.last_watched_at).getTime() : 0
+                    if (bWatched !== aWatched) return bWatched - aWatched
+                    const aUpdated = a.updated_at ? new Date(a.updated_at).getTime() : 0
+                    const bUpdated = b.updated_at ? new Date(b.updated_at).getTime() : 0
+                    return bUpdated - aUpdated
+                }),
+        [allEntries]
+    )
 
     const watchedEntries = useMemo(() => {
         return allEntries
@@ -151,16 +115,14 @@ export function useMediaEntries() {
         holdAndDroppedEntries,
         loading,
         initialLoading,
-        watchingLoading,
+        // Watching now derives from the same fetch, so it shares the initial load state.
+        watchingLoading: initialLoading,
         error,
         refreshEntries: async () => {
-            await Promise.all([
-                fetchEntries(false),
-                fetchWatchingEntries()
-            ])
+            await fetchEntries(false)
         },
-        refreshWatchingEntries: fetchWatchingEntries,
-        handleWatchingEntryUpdate,
+        // Updating allEntries automatically re-derives (and re-sorts) watchingEntries.
+        handleWatchingEntryUpdate: updateEntryInList,
         updateEntryInList,
         handleDelete,
     }

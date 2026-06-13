@@ -15,14 +15,22 @@ import {
 import { Loader2, Shield } from "lucide-react"
 import { toast } from "sonner"
 import { updateUserAdminRole } from "@/lib/admin-actions"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 interface UsersTableProps {
   users: UserProfile[]
   onUpdate: () => Promise<void>
 }
 
+interface PendingRoleChange {
+  userId: string
+  currentValue: boolean
+  email: string
+}
+
 export function UsersTable({ users, onUpdate }: UsersTableProps) {
   const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null)
+  const [pendingRoleChange, setPendingRoleChange] = useState<PendingRoleChange | null>(null)
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -37,9 +45,12 @@ export function UsersTable({ users, onUpdate }: UsersTableProps) {
     }
   }
 
-  const handleToggleAdminRole = async (userId: string, currentValue: boolean) => {
+  const confirmRoleChange = async () => {
+    if (!pendingRoleChange) return
+    const { userId, currentValue } = pendingRoleChange
     setUpdatingRoleUserId(userId)
     const result = await updateUserAdminRole(userId, !currentValue)
+    setPendingRoleChange(null)
 
     if (!result.success) {
       toast.error(result.error || "Failed to update admin role")
@@ -104,7 +115,7 @@ export function UsersTable({ users, onUpdate }: UsersTableProps) {
                 variant={user.is_admin ? "outline" : "default"}
                 className="font-mono text-xs w-full"
                 disabled={updatingRoleUserId === user.user_id}
-                onClick={() => handleToggleAdminRole(user.user_id, user.is_admin)}
+                onClick={() => setPendingRoleChange({ userId: user.user_id, currentValue: user.is_admin, email: user.email })}
               >
                 {updatingRoleUserId === user.user_id ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -163,7 +174,7 @@ export function UsersTable({ users, onUpdate }: UsersTableProps) {
                     variant={user.is_admin ? "outline" : "default"}
                     className="font-mono text-xs"
                     disabled={updatingRoleUserId === user.user_id}
-                    onClick={() => handleToggleAdminRole(user.user_id, user.is_admin)}
+                    onClick={() => setPendingRoleChange({ userId: user.user_id, currentValue: user.is_admin, email: user.email })}
                   >
                     {updatingRoleUserId === user.user_id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -179,6 +190,23 @@ export function UsersTable({ users, onUpdate }: UsersTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDialog
+        open={pendingRoleChange !== null}
+        onOpenChange={(open) => !open && setPendingRoleChange(null)}
+        title={pendingRoleChange?.currentValue ? "Remove admin access?" : "Grant admin access?"}
+        description={
+          pendingRoleChange
+            ? pendingRoleChange.currentValue
+              ? `${pendingRoleChange.email} will lose access to the admin panel and user management.`
+              : `${pendingRoleChange.email} will be able to manage users and access the admin panel.`
+            : ""
+        }
+        confirmLabel={pendingRoleChange?.currentValue ? "Remove admin" : "Make admin"}
+        variant={pendingRoleChange?.currentValue ? "destructive" : "default"}
+        loading={updatingRoleUserId !== null}
+        onConfirm={confirmRoleChange}
+      />
     </div>
   )
 }

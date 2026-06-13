@@ -190,3 +190,30 @@
     transparent
   );
 }
+
+/* Respect users who prefer reduced motion: neutralize decorative animation
+   and hover movement, but keep loading spinners spinning so "loading" still reads. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    background: hsl(var(--muted));
+  }
+
+  .recharts-wrapper,
+  .page-content {
+    animation: none;
+  }
+
+  .card-hover {
+    transition: none;
+  }
+
+  .card-hover:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .collapsible-panel {
+    transition: none;
+  }
+}

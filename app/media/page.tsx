@@ -1,13 +1,15 @@
 "use client"
 
 import { useState, Suspense, useEffect, useMemo, useRef } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 import { MediaEntry } from "@/lib/database.types"
 import { applyFilters } from "@/lib/filter-types"
 import { MediaTable, COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-table"
 import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Columns, CheckSquare, Shuffle } from "lucide-react"
+import { AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Columns, CheckSquare, Shuffle } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { DiaryPageSkeleton } from "@/components/skeletons"
 import { useMediaEntries } from "@/hooks/useMediaEntries"
@@ -24,6 +26,11 @@ import {
 import { useColumnPreferences } from "@/hooks/useColumnPreferences"
 import { WatchThisDialog } from "@/components/watch-this-dialog"
 import { MovieDiaryStickyBar, MovieDiarySectionKey } from "@/components/media/MovieDiaryStickyBar"
+
+const MediaDetailsDialog = dynamic(
+  () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+  { ssr: false }
+)
 
 const matchesDiarySearch = (entry: MediaEntry, query: string) => {
   const q = query.toLowerCase().trim()
@@ -92,6 +99,7 @@ function EntriesPageContent() {
   const { visibleColumns, toggleColumn } = useColumnPreferences()
 
   const [showSelectMode, setShowSelectMode] = useState(false)
+  const [showAddDialog, setShowAddDialog] = useState(false)
   const [watchedCollapsed, setWatchedCollapsed] = useState(false)
   const [plannedCollapsed, setPlannedCollapsed] = useState(false)
   const [holdDroppedCollapsed, setHoldDroppedCollapsed] = useState(false)
@@ -106,7 +114,10 @@ function EntriesPageContent() {
   const holdDroppedSectionRef = useRef<HTMLElement | null>(null)
 
   const handlePickRandomPlanned = () => {
-    if (filteredPlanned.length === 0) return
+    if (filteredPlanned.length === 0) {
+      toast.message("No planned items match your filters.")
+      return
+    }
     setPlannedCollapsed(false)
     const random = filteredPlanned[Math.floor(Math.random() * filteredPlanned.length)]
     if (random) setWatchThisEntry(random)
@@ -120,31 +131,44 @@ function EntriesPageContent() {
     }
   }, [searchParams, router, refreshEntries])
 
+  // Active-section detection for the sticky nav. IntersectionObserver avoids reading
+  // layout (getBoundingClientRect) on every scroll frame. Re-runs when sections mount
+  // (after data loads) so the newly-rendered sections get observed.
   useEffect(() => {
-    const HEADER_OFFSET = 170
     const sectionRefs: Array<{ key: MovieDiarySectionKey; ref: React.RefObject<HTMLElement | null> }> = [
       { key: "watching", ref: watchingSectionRef },
       { key: "watched", ref: watchedSectionRef },
       { key: "planned", ref: plannedSectionRef },
       { key: "holdDropped", ref: holdDroppedSectionRef },
     ]
-    const handleScroll = () => {
-      if (programmaticScrollRef.current) return
-      let current: MovieDiarySectionKey | null = null
-      for (const { key, ref } of sectionRefs) {
-        if (!ref.current) continue
-        const rect = ref.current.getBoundingClientRect()
-        if (rect.top <= HEADER_OFFSET && rect.bottom > HEADER_OFFSET) {
-          current = key
-          break
+
+    // The observer callback only reports targets whose visibility changed, so track
+    // cumulative visibility and pick the first intersecting section in document order.
+    const visibility = new Map<MovieDiarySectionKey, boolean>()
+
+    const observer = new IntersectionObserver(
+      (observed) => {
+        if (programmaticScrollRef.current) return
+        for (const entry of observed) {
+          const key = (entry.target as HTMLElement).dataset.sectionKey as MovieDiarySectionKey
+          visibility.set(key, entry.isIntersecting)
         }
+        const current = sectionRefs.find(({ key }) => visibility.get(key))?.key ?? null
+        setActiveSection(current)
+      },
+      // Detection band: just below the sticky header (~170px) down to ~40% of the viewport.
+      { rootMargin: "-170px 0px -60% 0px", threshold: 0 }
+    )
+
+    for (const { key, ref } of sectionRefs) {
+      if (ref.current) {
+        ref.current.dataset.sectionKey = key
+        observer.observe(ref.current)
       }
-      setActiveSection(current)
     }
-    handleScroll()
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+
+    return () => observer.disconnect()
+  }, [initialLoading, allEntries.length])
 
   const sectionJumps: Array<{ key: MovieDiarySectionKey; label: string }> = [
     { key: "watching", label: "Watching" },
@@ -202,9 +226,12 @@ function EntriesPageContent() {
   if (error && allEntries.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-destructive">
-          <AlertCircle className="h-8 w-8" />
-          <p className="text-sm font-mono">{error}</p>
+        <div className="flex flex-col items-center gap-3">
+          <AlertCircle className="h-8 w-8 text-destructive" />
+          <p className="text-sm font-mono text-destructive">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => refreshEntries()}>
+            Try again
+          </Button>
         </div>
       </div>
     )
@@ -212,14 +239,13 @@ function EntriesPageContent() {
 
   return (
     <div className="min-h-screen bg-background relative page-content">
-      {/* Loading overlay for subsequent loads */}
+      {/* Subtle top progress bar for subsequent loads (less jarring than a full-screen overlay) */}
       {loading && !initialLoading && (
-        <div className="fixed inset-0 bg-background/40 backdrop-blur-[2px] z-40 flex items-center justify-center pointer-events-none animate-in fade-in duration-150">
-          <div className="flex flex-col items-center gap-2 text-muted-foreground bg-background/90 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg border">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-xs font-mono">Refreshing...</p>
-          </div>
-        </div>
+        <div
+          className="fixed top-0 left-0 right-0 z-[60] h-0.5 bg-primary/70 animate-pulse pointer-events-none"
+          role="status"
+          aria-label="Refreshing"
+        />
       )}
 
       {/* Header */}
@@ -238,7 +264,7 @@ function EntriesPageContent() {
       />
 
       {/* Main Content */}
-      <main className="p-4 sm:p-6 relative">
+      <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 relative outline-none">
         <section id="watching" ref={watchingSectionRef}>
           <WatchingSection
             entries={filteredWatching}
@@ -252,7 +278,8 @@ function EntriesPageContent() {
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <Calendar className="h-12 w-12 opacity-30 mb-4" />
             <p className="text-sm font-mono mb-3">No entries yet</p>
-            <p className="text-sm text-center mb-4">Use the + button in the header to add your first entry</p>
+            <p className="text-sm text-center mb-4">Start tracking the films, shows, books, and games you care about.</p>
+            <Button onClick={() => setShowAddDialog(true)}>Add your first entry</Button>
           </div>
         ) : (
           <>
@@ -351,13 +378,14 @@ function EntriesPageContent() {
                     </span>
                   )}
                 </button>
-                {filteredPlanned.length > 0 && (
+                {plannedEntries.length > 0 && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0"
                     onClick={handlePickRandomPlanned}
                     title="Pick random to watch"
+                    aria-label="Pick a random planned item to watch"
                   >
                     <Shuffle className="h-4 w-4" />
                   </Button>
@@ -420,6 +448,16 @@ function EntriesPageContent() {
             </section>
           </>
         )}
+
+        <MediaDetailsDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          entry={null}
+          onSuccess={() => {
+            setShowAddDialog(false)
+            refreshEntries()
+          }}
+        />
       </main>
     </div>
   )

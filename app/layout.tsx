@@ -2,7 +2,6 @@
 import type { Metadata } from "next"
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google"
 import { Toaster } from "sonner"
-import { AuthenticatedLayout } from "@/components/authenticated-layout"
 import "./globals.css"
 
 const mono = JetBrains_Mono({
@@ -22,8 +21,8 @@ const sans = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: "analytics",
-  description: "Media consumption tracking and analytics",
+  title: "analythika",
+  description: "A quiet logbook for the films, shows, books, games, and podcasts you actually care about.",
 }
 
 export default function RootLayout({
@@ -34,6 +33,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${mono.variable} ${sans.variable} font-sans antialiased`}>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:border focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Skip to content
+        </a>
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -48,9 +53,9 @@ export default function RootLayout({
             `,
           }}
         />
-        <AuthenticatedLayout>
+        <div className="min-h-screen bg-background">
           {children}
-        </AuthenticatedLayout>
+        </div>
         <Toaster
           position="bottom-right"
           toastOptions={{

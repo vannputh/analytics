@@ -302,7 +302,7 @@ function LoginPageContent() {
               ? `We sent a code to ${email}`
               : mode === "login"
               ? "Enter your email to receive a magic link and code"
-              : "Request access to the application"}
+              : "Request access to analythika"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

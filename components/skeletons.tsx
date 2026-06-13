@@ -176,17 +176,48 @@ export function DiaryPageSkeleton() {
     );
 }
 
+// Shared KPI card placeholder — mirrors KPICard (label, 2xl value, subValue, right-aligned icon)
+function KPICardSkeleton() {
+    return (
+        <Card>
+            <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-7 w-20" />
+                        <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-8 w-8 rounded" />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+// Matches KPIGrid: 10 cards, grid-cols-2 / md:3 / lg:5
+const MEDIA_KPI_SLOTS = [
+    "spent", "hours", "days", "items", "rating",
+    "genre", "language", "genres", "languages", "platforms",
+] as const;
+
 export function KPIGridSkeleton() {
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i}>
-                    <CardContent className="p-6 space-y-2">
-                        <Skeleton className="h-4 w-1/2" />
-                        <Skeleton className="h-8 w-16" />
-                        <Skeleton className="h-3 w-3/4" />
-                    </CardContent>
-                </Card>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {MEDIA_KPI_SLOTS.map((slot) => (
+                <KPICardSkeleton key={slot} />
+            ))}
+        </div>
+    );
+}
+
+// Matches FoodKPIGrid: 6 cards, grid-cols-2 / md:3 / lg:6
+const FOOD_KPI_SLOTS = ["visits", "spent", "rating", "city", "type", "return"] as const;
+
+export function FoodKPIGridSkeleton() {
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {FOOD_KPI_SLOTS.map((slot) => (
+                <KPICardSkeleton key={slot} />
             ))}
         </div>
     );

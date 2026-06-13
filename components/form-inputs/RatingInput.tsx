@@ -19,13 +19,19 @@ export function RatingInput({
 }: RatingInputProps) {
     const [hoverValue, setHoverValue] = useState<number | null>(null)
 
-    // Handle click to set rating - left half = half star, right half = full star
+    // Handle click to set rating - left half = half star, right half = full star.
+    // Keyboard activation (Enter/Space) reports detail === 0 and no usable clientX,
+    // so it falls back to a full star to match the button's aria-label.
     const handleStarClick = (starIndex: number, e: React.MouseEvent<HTMLButtonElement>) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        const clickX = e.clientX - rect.left
-        const isLeftHalf = clickX < rect.width / 2
-
-        const newValue = isLeftHalf ? starIndex + 0.5 : starIndex + 1
+        let newValue: number
+        if (e.detail === 0) {
+            newValue = starIndex + 1
+        } else {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const clickX = e.clientX - rect.left
+            const isLeftHalf = clickX < rect.width / 2
+            newValue = isLeftHalf ? starIndex + 0.5 : starIndex + 1
+        }
 
         // If clicking the same value, toggle it off
         if (value === newValue) {
@@ -70,6 +76,7 @@ export function RatingInput({
                             type="button"
                             onClick={(e) => handleStarClick(i, e)}
                             onMouseMove={(e) => handleStarHover(i, e)}
+                            aria-label={`${label}: rate ${i + 1} out of 5`}
                             className="p-1 relative group hover:scale-110 transition-transform"
                         >
                             {/* Background empty star - larger size */}
@@ -104,6 +111,7 @@ export function RatingInput({
                     <button
                         type="button"
                         onClick={() => onChange(null)}
+                        aria-label={`Clear ${label} rating`}
                         className="ml-1 p-1 rounded-full hover:bg-muted transition-colors"
                     >
                         <X className="h-3 w-3 text-muted-foreground" />

@@ -34,3 +34,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# build / tooling artifacts (this project uses bun)
+package-lock.json
+build_log.txt
+lint_log.txt
+lint_output.txt
+tsc_log.txt
+depcheck_*.json
+
+# supabase cli local state
+supabase/.temp

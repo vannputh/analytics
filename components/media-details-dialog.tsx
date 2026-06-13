@@ -135,6 +135,7 @@ export function MediaDetailsDialog({
     const initialFormDataRef = useRef<string | null>(null);
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [episodeToDelete, setEpisodeToDelete] = useState<number | null>(null);
 
     // Duplicate IMDb ID handling
     // Set when createEntry detects an existing entry with the same imdb_id — dialog switches to edit mode for it.
@@ -1200,6 +1201,7 @@ export function MediaDetailsDialog({
                                                     size="icon"
                                                     onClick={() => fileInputRef.current?.click()}
                                                     title="Upload new poster"
+                                                    aria-label="Upload new poster"
                                                 >
                                                     <Upload className="h-4 w-4" />
                                                 </Button>
@@ -1225,7 +1227,7 @@ export function MediaDetailsDialog({
                                         newEpisodeNumber={newEpisodeNumber}
                                         onNewEpisodeNumberChange={setNewEpisodeNumber}
                                         onAddEpisode={handleAddEpisode}
-                                        onDeleteEpisode={handleDeleteEpisode}
+                                        onDeleteEpisode={(idx) => setEpisodeToDelete(idx)}
                                         onEditEpisode={async (idx, newDate) => {
                                             if (!entry) return;
                                             const updatedHistory = episodeHistory.map((record, i) =>
@@ -1318,6 +1320,24 @@ export function MediaDetailsDialog({
             confirmLabel="Delete"
             variant="destructive"
             onConfirm={handleDeleteConfirm}
+        />
+        <ConfirmDialog
+            open={episodeToDelete !== null}
+            onOpenChange={(open) => !open && setEpisodeToDelete(null)}
+            title="Delete episode?"
+            description={
+                episodeToDelete !== null && episodeHistory[episodeToDelete]
+                    ? `This will permanently remove episode ${episodeHistory[episodeToDelete].episode} from this entry's history. This action cannot be undone.`
+                    : ""
+            }
+            confirmLabel="Delete episode"
+            variant="destructive"
+            onConfirm={async () => {
+                if (episodeToDelete === null) return;
+                const idx = episodeToDelete;
+                setEpisodeToDelete(null);
+                await handleDeleteEpisode(idx);
+            }}
         />
         </>
     );

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMetadata } from "@/lib/services/metadata-fetcher";
+import { requireAuth } from "@/lib/api-auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth();
+    if (unauthorized) return unauthorized;
+
     const searchParams = request.nextUrl.searchParams;
     const title = searchParams.get("title");
     const imdbIdParam = searchParams.get("imdb_id");

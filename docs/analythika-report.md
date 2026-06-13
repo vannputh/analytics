@@ -1,6 +1,6 @@
-# Media Review: A Full-Stack Personal Media Tracking and Analytics Web Application
+# analythika: A Full-Stack Personal Media Tracking and Analytics Web Application
 
-**Project:** Media Review (`media-review`)
+**Project:** analythika (`analythika`)
 **Date:** April 2026
 **Repository:** analytics-web
 **Technology Stack:** Next.js 16, React 19, TypeScript 5, Supabase (PostgreSQL), Google Gemini AI
@@ -35,7 +35,7 @@
 
 ## Abstract
 
-Media consumption has become a central part of modern life, spanning movies, television series, books, games, podcasts, and live theatre. Despite this, most users lack a unified, personal system for tracking, rating, and analytically reflecting on their consumption habits across all media types. This paper presents **Media Review**, a full-stack web application designed to address this gap by providing a comprehensive personal media diary with rich analytics, automated metadata enrichment, and natural-language AI querying. The system is built on Next.js 16 with the App Router, React 19 Server Components, a Supabase-hosted PostgreSQL backend with Row-Level Security (RLS), and Google Gemini for natural-language-to-SQL query generation. Media Review enables users to record, filter, and visualize consumption patterns across six distinct media categories — Movie, TV Show, Book, Game, Podcast, and Live Theatre — and to interrogate their own data using plain-English questions. The application implements a secure admin-controlled user approval workflow, episodic watch-progress tracking, bulk CSV import with field mapping, batch metadata fetching from OMDB/TMDB, and a client-side analytics dashboard featuring KPIs and Recharts-powered visualizations. Results demonstrate a coherent, scalable architecture with clean separation between the UI, business logic, and data layers, and a practical implementation of safe AI-driven database access. Future directions include server-side recommendation, social sharing of watchlists, and integration with streaming-platform APIs for automatic watch-history ingestion.
+Media consumption has become a central part of modern life, spanning movies, television series, books, games, podcasts, and live theatre. Despite this, most users lack a unified, personal system for tracking, rating, and analytically reflecting on their consumption habits across all media types. This paper presents **analythika**, a full-stack web application designed to address this gap by providing a comprehensive personal media diary with rich analytics, automated metadata enrichment, and natural-language AI querying. The system is built on Next.js 16 with the App Router, React 19 Server Components, a Supabase-hosted PostgreSQL backend with Row-Level Security (RLS), and Google Gemini for natural-language-to-SQL query generation. analythika enables users to record, filter, and visualize consumption patterns across six distinct media categories — Movie, TV Show, Book, Game, Podcast, and Live Theatre — and to interrogate their own data using plain-English questions. The application implements a secure admin-controlled user approval workflow, episodic watch-progress tracking, bulk CSV import with field mapping, batch metadata fetching from OMDB/TMDB, and a client-side analytics dashboard featuring KPIs and Recharts-powered visualizations. Results demonstrate a coherent, scalable architecture with clean separation between the UI, business logic, and data layers, and a practical implementation of safe AI-driven database access. Future directions include server-side recommendation, social sharing of watchlists, and integration with streaming-platform APIs for automatic watch-history ingestion.
 
 ---
 
@@ -47,7 +47,7 @@ The proliferation of streaming services, digital storefronts, and on-demand cont
 
 Existing solutions are fragmented. IMDb allows users to rate movies but does not track games or podcasts. Goodreads is dedicated to books. Letterboxd is exclusively for films. Steam tracks game playtime but has no integration with passive media. No mainstream tool unifies all media types under a single personal analytics workspace. Beyond simple logging, users lack the ability to ask analytical questions — "How much have I spent on media this year?" or "What genre do I rate highest?" — without manually exporting data to spreadsheets.
 
-**Media Review** was built to close this gap: a single, self-hosted personal media diary that captures any media type, enriches records with external metadata, and provides both visual analytics and a conversational AI query interface, all secured behind a per-user Row-Level Security model that guarantees complete data isolation.
+**analythika** was built to close this gap: a single, self-hosted personal media diary that captures any media type, enriches records with external metadata, and provides both visual analytics and a conversational AI query interface, all secured behind a per-user Row-Level Security model that guarantees complete data isolation.
 
 ### Research Questions
 
@@ -79,31 +79,31 @@ This project makes the following contributions:
 
 ### Personal Informatics and Self-Tracking
 
-Li et al. (2010) introduced the framework of *personal informatics* — systems that help people collect and reflect on personal data to gain self-knowledge. Their stage-based model (preparation, collection, integration, reflection, action) maps directly onto the design goals of Media Review: users prepare by defining what media types to track, collect through manual entry or CSV import, integrate through automated metadata enrichment, reflect via the analytics dashboard, and act by updating watch statuses or planning new content.
+Li et al. (2010) introduced the framework of *personal informatics* — systems that help people collect and reflect on personal data to gain self-knowledge. Their stage-based model (preparation, collection, integration, reflection, action) maps directly onto the design goals of analythika: users prepare by defining what media types to track, collect through manual entry or CSV import, integrate through automated metadata enrichment, reflect via the analytics dashboard, and act by updating watch statuses or planning new content.
 
-Choe et al. (2014) and Rooksby et al. (2014) identified key challenges in self-tracking: entry friction, motivation decay, and the difficulty of deriving insight from raw logs. Media Review addresses entry friction through one-click metadata autofill (OMDB/TMDB), bulk CSV import, and a natural-language AI interface that eliminates the need to write queries manually.
+Choe et al. (2014) and Rooksby et al. (2014) identified key challenges in self-tracking: entry friction, motivation decay, and the difficulty of deriving insight from raw logs. analythika addresses entry friction through one-click metadata autofill (OMDB/TMDB), bulk CSV import, and a natural-language AI interface that eliminates the need to write queries manually.
 
 ### Media Recommendation and Consumption Tracking
 
-Existing recommendation systems (Koren et al., 2009; He et al., 2017) typically operate on implicit or explicit rating signals collected by platforms. However, cross-platform personal tracking — which is what Media Review enables — is a substantially different problem. The user controls all data, enabling analyses that no single platform can perform: total spend across all media types per month, average personal rating versus average public rating by genre, or time taken to complete media relative to medium.
+Existing recommendation systems (Koren et al., 2009; He et al., 2017) typically operate on implicit or explicit rating signals collected by platforms. However, cross-platform personal tracking — which is what analythika enables — is a substantially different problem. The user controls all data, enabling analyses that no single platform can perform: total spend across all media types per month, average personal rating versus average public rating by genre, or time taken to complete media relative to medium.
 
-Prior work on personal media libraries includes MyAnimeList (MAL), which pioneered the status-based tracking model (Watching, Completed, On Hold, Dropped, Plan to Watch) later replicated by services like AniList. Media Review adopts and extends this model to all media types, adding `Currently Watching` and `Planned` as additional states, and persisting every status transition in a dedicated `media_status_history` table with optional notes.
+Prior work on personal media libraries includes MyAnimeList (MAL), which pioneered the status-based tracking model (Watching, Completed, On Hold, Dropped, Plan to Watch) later replicated by services like AniList. analythika adopts and extends this model to all media types, adding `Currently Watching` and `Planned` as additional states, and persisting every status transition in a dedicated `media_status_history` table with optional notes.
 
 ### Natural Language Interfaces to Databases
 
 Natural language interfaces to databases (NLIDBs) have been studied since the 1970s (Androutsopoulos et al., 1995). The emergence of large language models (LLMs) has dramatically lowered the cost of implementing NLIDBs. Rajkumar et al. (2022) demonstrated that GPT-3 family models can generate correct SQL for complex multi-table queries when provided an accurate schema description. Guo et al. (2019) introduced the IRNet architecture for cross-domain text-to-SQL.
 
-Media Review leverages Google Gemini 1.5 Pro as the NL-to-SQL backend. The system prompt precisely describes the `media_entries` schema including column types, value examples, and array handling conventions (`UNNEST` for `genre[]` and `language[]`). Ten example question–SQL pairs are embedded in the prompt to guide few-shot generation. All generated queries are validated client-side (SELECT-only regex) and then executed inside the `execute_sql_query` Postgres function, which enforces a second layer of keyword-based restriction and inherits the calling user's RLS context.
+analythika leverages Google Gemini 1.5 Pro as the NL-to-SQL backend. The system prompt precisely describes the `media_entries` schema including column types, value examples, and array handling conventions (`UNNEST` for `genre[]` and `language[]`). Ten example question–SQL pairs are embedded in the prompt to guide few-shot generation. All generated queries are validated client-side (SELECT-only regex) and then executed inside the `execute_sql_query` Postgres function, which enforces a second layer of keyword-based restriction and inherits the calling user's RLS context.
 
 ### Full-Stack Web Application Architecture
 
-The move to React Server Components (RSC) and the Next.js App Router has changed the conventional wisdom on where to place data-fetching logic. Vercel (2023) advocates a model where server components fetch data directly and pass props to interactive client components, reducing client-side JavaScript bundles. Media Review adopts this pattern for the analytics dashboard (server-fetched metadata, client-rendered charts) and uses Next.js Server Actions — introduced in Next.js 14 and stabilized in Next.js 16 — for all mutation operations, eliminating a separate REST mutation layer for CRUD operations.
+The move to React Server Components (RSC) and the Next.js App Router has changed the conventional wisdom on where to place data-fetching logic. Vercel (2023) advocates a model where server components fetch data directly and pass props to interactive client components, reducing client-side JavaScript bundles. analythika adopts this pattern for the analytics dashboard (server-fetched metadata, client-rendered charts) and uses Next.js Server Actions — introduced in Next.js 14 and stabilized in Next.js 16 — for all mutation operations, eliminating a separate REST mutation layer for CRUD operations.
 
 Supabase as a backend platform has been widely adopted as a Firebase alternative with Postgres semantics and RLS-based security (Supabase, 2023). Its SSR helpers (`@supabase/ssr`) provide seamless session management across server and client components, which is particularly important in the App Router model where request context does not flow automatically between rendering environments.
 
 ### Security in Multi-User Personal Data Applications
 
-Narayanan and Shmatikova (2006) demonstrated that anonymized datasets can be de-anonymized by cross-referencing with public information, highlighting the importance of strict data isolation in multi-user systems. Media Review's RLS policies at the database level mean that even a programming error in the application layer cannot expose one user's entries to another — the database itself enforces isolation. The admin approval gate (pending → approved → rejected lifecycle) prevents unauthorized access to the application before a user has been explicitly granted access by an administrator.
+Narayanan and Shmatikova (2006) demonstrated that anonymized datasets can be de-anonymized by cross-referencing with public information, highlighting the importance of strict data isolation in multi-user systems. analythika's RLS policies at the database level mean that even a programming error in the application layer cannot expose one user's entries to another — the database itself enforces isolation. The admin approval gate (pending → approved → rejected lifecycle) prevents unauthorized access to the application before a user has been explicitly granted access by an administrator.
 
 ---
 
@@ -111,7 +111,7 @@ Narayanan and Shmatikova (2006) demonstrated that anonymized datasets can be de-
 
 ### System Design Overview
 
-Media Review follows a **three-tier, feature-layered architecture** organized as follows:
+analythika follows a **three-tier, feature-layered architecture** organized as follows:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -591,7 +591,7 @@ The implementation successfully delivers all core features defined in the system
 
 ## Conclusion
 
-Media Review demonstrates that a unified personal media tracking application across six distinct media types is both architecturally feasible and practically useful. The central design insight — that Movies, TV Shows, Books, Games, Podcasts, and Live Theatre can share a single relational table with type-specific nullable columns and JSONB for extensible structured data — proves effective: the schema accommodates all media types without separate tables while retaining full relational query capabilities.
+analythika demonstrates that a unified personal media tracking application across six distinct media types is both architecturally feasible and practically useful. The central design insight — that Movies, TV Shows, Books, Games, Podcasts, and Live Theatre can share a single relational table with type-specific nullable columns and JSONB for extensible structured data — proves effective: the schema accommodates all media types without separate tables while retaining full relational query capabilities.
 
 The integration of Google Gemini for natural-language-to-SQL query generation brings conversational analytics to personal data, enabling non-technical users to ask questions about their media consumption without writing a single line of SQL. The two-layer safety model (application regex + Postgres stored procedure) provides confidence that this AI integration cannot cause data loss or unauthorized access, even under adversarial prompting conditions.
 

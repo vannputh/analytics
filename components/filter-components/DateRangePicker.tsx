@@ -16,6 +16,51 @@ export interface DateRangePickerProps {
     className?: string
 }
 
+// Quick presets. getRange runs on click so "now" is always current.
+const DATE_PRESETS: { label: string; getRange: () => [Date, Date] }[] = [
+    {
+        label: "Last 30 days",
+        getRange: () => {
+            const now = new Date()
+            const start = new Date()
+            start.setDate(now.getDate() - 30)
+            return [start, now]
+        },
+    },
+    {
+        label: "Last 90 days",
+        getRange: () => {
+            const now = new Date()
+            const start = new Date()
+            start.setDate(now.getDate() - 90)
+            return [start, now]
+        },
+    },
+    {
+        label: "Last 6 months",
+        getRange: () => {
+            const now = new Date()
+            const start = new Date()
+            start.setMonth(now.getMonth() - 6)
+            return [start, now]
+        },
+    },
+    {
+        label: "Last Year",
+        getRange: () => {
+            const now = new Date()
+            return [new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()), now]
+        },
+    },
+    {
+        label: "This Year",
+        getRange: () => {
+            const now = new Date()
+            return [new Date(now.getFullYear(), 0, 1), now]
+        },
+    },
+]
+
 export function DateRangePicker({ from, to, onChange, className }: DateRangePickerProps) {
     const [open, setOpen] = useState(false)
 
@@ -71,41 +116,31 @@ export function DateRangePicker({ from, to, onChange, className }: DateRangePick
                     </div>
                 </div>
                 <Separator />
-                <div className="p-2 flex flex-wrap gap-2">
+                <div className="p-2 grid grid-cols-2 gap-2">
+                    {DATE_PRESETS.map((preset) => (
+                        <Button
+                            key={preset.label}
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                                const [start, end] = preset.getRange()
+                                onChange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"))
+                            }}
+                        >
+                            {preset.label}
+                        </Button>
+                    ))}
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="flex-1 min-w-[4rem] h-7 text-xs"
+                        className="h-7 text-xs"
                         onClick={() => {
                             onChange(null, null)
                             setOpen(false)
                         }}
                     >
-                        Clear
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-1 min-w-[4rem] h-7 text-xs"
-                        onClick={() => {
-                            const now = new Date()
-                            const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
-                            onChange(format(yearAgo, "yyyy-MM-dd"), format(now, "yyyy-MM-dd"))
-                        }}
-                    >
-                        Last Year
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-1 min-w-[4rem] h-7 text-xs"
-                        onClick={() => {
-                            const now = new Date()
-                            const startOfYear = new Date(now.getFullYear(), 0, 1)
-                            onChange(format(startOfYear, "yyyy-MM-dd"), format(now, "yyyy-MM-dd"))
-                        }}
-                    >
-                        This Year
+                        All time
                     </Button>
                 </div>
             </PopoverContent>

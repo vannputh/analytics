@@ -1,4 +1,4 @@
-# Media Review
+# analythika
 
 A comprehensive media tracking and analytics application built with Next.js, React, and Supabase. Track movies, TV shows, podcasts, and live theatre performances with detailed analytics, filtering, and metadata integration. Also includes a food & drinks tracking workspace with restaurant reviews and dining analytics.
 
@@ -32,7 +32,7 @@ A comprehensive media tracking and analytics application built with Next.js, Rea
 
 ## Overview
 
-Media Review is a full-stack web application that allows users to track and analyze their media consumption and dining experiences. The application is built with a modern tech stack focusing on performance, user experience, and scalability.
+analythika is a full-stack web application that allows users to track and analyze their media consumption and dining experiences. The application is built with a modern tech stack focusing on performance, user experience, and scalability.
 
 ### Key Capabilities
 
@@ -395,7 +395,7 @@ URL Params → useMediaFilters hook → Filtered Data → Component Render
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd media-review
+   cd analythika
    ```
 
 2. **Install dependencies**:
@@ -544,7 +544,7 @@ This project uses the **Next.js 16 proxy convention**: authentication and sessio
 ## Project Structure
 
 ```
-media-review/
+analythika/
 ├── app/                          # Next.js App Router
 │   ├── (auth)/                   # Auth-related routes
 │   │   ├── login/                # Login page

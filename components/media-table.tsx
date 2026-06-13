@@ -581,9 +581,11 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
               {showSelectMode && (
                 <TableHead className="w-[50px]">
                   <button
+                    type="button"
                     onClick={toggleSelectAll}
                     className="flex items-center justify-center"
                     title={allSelected ? "Deselect all" : "Select all"}
+                    aria-label={allSelected ? "Deselect all entries" : "Select all entries"}
                   >
                     {allSelected ? (
                       <CheckSquare className="h-4 w-4" />

@@ -14,6 +14,8 @@ import { FoodDetailsDialog } from "@/components/food-details-dialog"
 import { FoodAddDialog } from "@/components/food-add-dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { FoodKPIGridSkeleton, ChartGridSkeleton } from "@/components/skeletons"
+import { FoodSubRatings } from "@/components/analytics/FoodSubRatings"
 import {
     TableBody,
     TableCell,
@@ -26,13 +28,7 @@ import {
 const FoodKPIGrid = dynamic(
     () => import("@/components/analytics/FoodKPIGrid").then(m => m.FoodKPIGrid),
     {
-        loading: () => (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Array(4).fill(0).map((_, i) => (
-                    <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
-                ))}
-            </div>
-        ),
+        loading: () => <FoodKPIGridSkeleton />,
         ssr: false
     }
 )
@@ -40,7 +36,7 @@ const FoodKPIGrid = dynamic(
 const FoodAnalyticsCharts = dynamic(
     () => import("@/components/analytics/FoodAnalyticsCharts").then(m => m.FoodAnalyticsCharts),
     {
-        loading: () => <div className="h-96 bg-muted animate-pulse rounded-lg" />,
+        loading: () => <ChartGridSkeleton />,
         ssr: false
     }
 )
@@ -414,7 +410,7 @@ export function AnalyticsClient({ initialEntries, itemCategories, cuisineTypes, 
                 </Card>
             )}
 
-            <main className="p-4 sm:p-6">
+            <main id="main-content" tabIndex={-1} className="p-4 sm:p-6 outline-none">
                 {filteredEntries.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                         <Utensils className="h-12 w-12 opacity-30 mb-4" />
@@ -426,6 +422,7 @@ export function AnalyticsClient({ initialEntries, itemCategories, cuisineTypes, 
                 ) : (
                     <div className="space-y-6">
                         <FoodKPIGrid metrics={metrics} />
+                        <FoodSubRatings metrics={metrics} />
                         <FoodAnalyticsCharts
                             metrics={metrics}
                             onDrillDown={onDrillDown}

@@ -19,7 +19,7 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <span className="text-lg font-semibold tracking-tight">
-              analytics
+              analythika
             </span>
           </div>
 

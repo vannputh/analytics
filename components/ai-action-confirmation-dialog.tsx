@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
+import { SafeImage } from "@/components/ui/safe-image"
 import { ValidatedAction } from "@/lib/ai-action-parser"
 import { toast } from "sonner"
 
@@ -214,12 +215,14 @@ export function AIActionConfirmationDialog({
                                 ))}
                             </div>
                             {action.data.poster_url && typeof action.data.poster_url === "string" && (
-                              <div className="shrink-0">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img 
-                                  src={action.data.poster_url} 
-                                  alt="Poster preview" 
-                                  className="w-16 h-24 sm:w-20 sm:h-32 rounded-md object-cover border shadow-sm bg-muted"
+                              <div className="shrink-0 relative w-16 h-24 sm:w-20 sm:h-32 rounded-md overflow-hidden border shadow-sm bg-muted">
+                                <SafeImage
+                                  src={action.data.poster_url}
+                                  alt="Poster preview"
+                                  fill
+                                  sizes="80px"
+                                  className="object-cover"
+                                  fallbackElement={null}
                                 />
                               </div>
                             )}

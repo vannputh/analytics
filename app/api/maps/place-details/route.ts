@@ -5,6 +5,7 @@ import {
   inferCuisineTypesFromPlaceTypes,
   normalizeGooglePlaceTypes,
 } from "@/lib/food-place-inference";
+import { requireAuth } from "@/lib/api-auth";
 
 interface GoogleAddressComponent {
   longText?: string;
@@ -204,6 +205,9 @@ function getAddressFields(components: GoogleAddressComponent[] | undefined): {
 
 export async function POST(request: NextRequest) {
   try {
+    const unauthorized = await requireAuth();
+    if (unauthorized) return unauthorized;
+
     const body = (await request.json()) as FoodPlaceDetailsRequest;
     const rawUrl = normalizeText(body.url);
     let placeId = normalizeNullable(body.placeId);
