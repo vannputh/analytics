@@ -1,0 +1,36 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@analytics/domain": [
+        "../../packages/domain/src/index.ts"
+      ],
+      "@analytics/domain/*": [
+        "../../packages/domain/src/*"
+      ],
+      "@analytics/data": [
+        "../../packages/data/src/index.ts"
+      ],
+      "@analytics/data/*": [
+        "../../packages/data/src/*"
+      ],
+      "@analytics/hooks": [
+        "../../packages/hooks/src/index.ts"
+      ],
+      "@analytics/hooks/*": [
+        "../../packages/hooks/src/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}

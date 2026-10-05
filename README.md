@@ -1,6 +1,10 @@
 # analythika
 
-A comprehensive media tracking and analytics application built with Next.js, React, and Supabase. Track movies, TV shows, podcasts, and live theatre performances with detailed analytics, filtering, and metadata integration. Also includes a food & drinks tracking workspace with restaurant reviews and dining analytics.
+A media and food tracking product. The web app is Next.js, React, and Supabase. The iOS client is Expo. Track movies, TV shows, podcasts, and live theatre with analytics, filtering, and metadata integration, plus a food and drinks workspace with restaurant reviews.
+
+This repository is a Bun workspace. `apps/web` is the analythika site (https://analyticka.vercel.app/). `apps/native` is the Expo app folded in from `vannputh/analytics-app`, including the open food-tab work on `slops/food-qol-features-e876`. Shared types and analytics math live in `packages/domain`, `packages/data`, and `packages/hooks`. See [docs/monorepo.md](docs/monorepo.md).
+
+Set the Vercel project Root Directory to `apps/web` so production keeps deploying the Next.js app.
 
 ## Table of Contents
 
@@ -385,7 +389,7 @@ URL Params → useMediaFilters hook → Filtered Data → Component Render
 
 ### Prerequisites
 
-- **Node.js 18+** or **Bun** (recommended)
+- **Bun** (package manager for this workspace)
 - A **Supabase account** and project
 - (Optional) **OMDB API key** for metadata fetching
 - (Optional) **Google Gemini API key** for AI features
@@ -394,11 +398,11 @@ URL Params → useMediaFilters hook → Filtered Data → Component Render
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
-   cd analythika
+   git clone https://github.com/vannputh/analytics.git
+   cd analytics
    ```
 
-2. **Install dependencies**:
+2. **Install dependencies** from the repository root:
    ```bash
    bun install
    ```
@@ -411,7 +415,7 @@ URL Params → useMediaFilters hook → Filtered Data → Component Render
 
 3. **Set up environment variables**:
    
-   Create a `.env.local` file in the root directory:
+   Create a `.env.local` file in the repository root. The Expo config reads that file, and the Next.js app loads it from the monorepo root as well. Vercel injects the same variables for `apps/web`. Do not commit this file.
    ```env
    # Supabase Configuration (Required)
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -446,12 +450,17 @@ URL Params → useMediaFilters hook → Filtered Data → Component Render
    - Create RLS policies for user data isolation
    - Set up the `execute_sql_query` function for AI queries
 
-5. **Run the development server**:
+5. **Run the web app**:
    ```bash
    bun run dev
    ```
 
-6. **Open the application**:
+   The native app:
+   ```bash
+   bun run native:dev
+   ```
+
+6. **Open the web application**:
    Navigate to [http://localhost:3000](http://localhost:3000) in your browser
 
 ## Configuration
@@ -539,13 +548,18 @@ Key configurations in `next.config.ts`:
 
 ### Proxy (Auth)
 
-This project uses the **Next.js 16 proxy convention**: authentication and session validation is handled in `proxy.ts` at the project root (not `middleware.ts`). The exported function is named `proxy`, and the `config.matcher` works identically to the previous middleware convention. See `AGENTS.md` for details on the security rationale.
+The web app uses the **Next.js 16 proxy convention**: authentication and session validation is handled in `apps/web/proxy.ts` (not `middleware.ts`). The exported function is named `proxy`, and the `config.matcher` works identically to the previous middleware convention. See `AGENTS.md`.
 
 ## Project Structure
 
 ```
-analythika/
-├── app/                          # Next.js App Router
+analytics/
+├── apps/web/                     # Next.js analythika app
+├── apps/native/                  # Expo app (from analytics-app)
+├── packages/domain/              # Shared types and analytics math
+├── packages/data/                # Supabase repositories
+├── packages/hooks/               # Shared hooks
+├── apps/web/app/                 # Next.js App Router
 │   ├── (auth)/                   # Auth-related routes
 │   │   ├── login/                # Login page
 │   │   └── auth/                  # Auth callbacks
@@ -1321,10 +1335,17 @@ Consider setting up:
 
 ## Scripts
 
-- `bun run dev` - Start development server (with hot reload)
-- `bun run build` - Build production bundle
-- `bun run start` - Start production server
-- `bun run lint` - Run ESLint
+Run these from the repository root.
+
+- `bun run dev` - Start the Next.js app
+- `bun run build` - Build the Next.js app
+- `bun run start` - Start the Next.js production server
+- `bun run lint` - Lint the web app
+- `bun run test` - Run web unit tests
+- `bun run test:shared` - Run domain, data, and hooks tests
+- `bun run test:native` - Run Expo unit tests
+- `bun run typecheck` - Typecheck web, native, and shared packages
+- `bun run native:dev` - Start the Expo app
 
 ## Troubleshooting
 

@@ -1,5 +1,14 @@
 # Agent Guidelines
 
+This repository is a Bun workspace.
+
+- `apps/web` is the Next.js analythika app and the production web deploy.
+- `apps/native` is the Expo SDK 55 app folded in from `vannputh/analytics-app` (food tab and place search included).
+- `packages/domain` holds shared types and pure analytics math. `packages/data` and `packages/hooks` serve the native app.
+- Web diary statuses and native diary statuses are different vocabularies. Do not collapse them.
+- Native UI follows Apple HIG and a monochrome default. Web UI keeps the existing analythika styling.
+- See `docs/monorepo.md`.
+
 ## Modular Architecture & Code Organization
 
 - **Favor composition over monoliths**
@@ -51,9 +60,9 @@
 
 ## Next.js 16 Proxy Convention
 
-This project uses **Next.js 16**, which deprecated the `middleware` file convention in favor of `proxy`.
+The web app uses **Next.js 16**, which deprecated the `middleware` file convention in favor of `proxy`.
 
-- **File:** Use `proxy.ts` at the project root (not `middleware.ts`)
+- **File:** Use `apps/web/proxy.ts` (not `middleware.ts`)
 - **Function:** Export a function named `proxy` (not `middleware`)
 - **Config:** The `config` export with `matcher` works the same way as before
 
